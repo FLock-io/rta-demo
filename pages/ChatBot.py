@@ -37,7 +37,7 @@ def main():
         show_welcome_and_examples()
 
     # Display chat messages
-    for message in st.session_state.messages:
+    for msg_idx, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
@@ -45,21 +45,28 @@ def main():
                 display_execution_plan(message["plan"])
 
             if "results" in message:
-                display_results(message["results"])
+                display_results(message["results"], msg_idx)
 
     # Chat input
     if prompt := st.chat_input("Ask a question about RTA transit data..."):
-        # Add user message
+        # Add user message to session state
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        with st.chat_message("user"):
-            st.write(prompt)
+        # Set processing flag
+        st.session_state.processing = True
 
-        # Generate assistant response
+        # Rerun to show user message and start processing
+        st.rerun()
+
+    # Process query if flag is set
+    if st.session_state.get("processing", False):
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response = process_query(prompt)
+                # Get the last user message
+                last_user_msg = st.session_state.messages[-1]["content"]
+                response = process_query(last_user_msg)
                 st.session_state.messages.append(response)
+                st.session_state.processing = False
 
                 st.write("Here's what I found:")
 
@@ -67,7 +74,9 @@ def main():
                     display_execution_plan(response["plan"])
 
                 if "results" in response:
-                    display_results(response["results"])
+                    # Use length of messages as index for new response
+                    display_results(response["results"], len(st.session_state.messages) - 1)
+                st.rerun()
 
 
 def process_query(query):
@@ -167,16 +176,18 @@ def display_execution_plan(plan):
                 st.caption(f"Parameters: {step.get('parameters', {})}")
 
 
-def display_results(results):
-    """Display analysis results"""
-    for result in results:
+def display_results(results, message_idx):
+    """Display analysis results with unique keys based on message index"""
+    for result_idx, result in enumerate(results):
         if result["type"] == "dataframe":
             st.subheader(f"📊 {result['title']}")
             st.dataframe(result["data"], use_container_width=True)
 
         elif result["type"] == "chart":
             st.subheader(f"📈 {result['title']}")
-            st.plotly_chart(result["data"], use_container_width=True)
+            # Generate unique key based on message index and result index
+            chart_key = f"chart_msg{message_idx}_result{result_idx}"
+            st.plotly_chart(result["data"], use_container_width=True, key=chart_key)
 
         elif result["type"] == "metric":
             st.metric(result["title"], result["value"], result.get("delta"))
