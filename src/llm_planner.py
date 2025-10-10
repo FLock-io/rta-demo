@@ -526,17 +526,17 @@ class LLMPlanner:
             },
             {
                 "name": "analyze_weekend_vs_weekday",
-                "description": "Compare weekend vs weekday performance from TTSS daily summary data.",
+                "description": "Compare weekend vs weekday performance from TTSS daily summary data. Note: Daily data is aggregated by Service only, not by individual routes.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "service": {
                             "type": "string",
-                            "description": "Optional service type filter",
+                            "description": "Service type filter: 'Urban', 'Intercity', 'Feeder', or 'Seasonal'",
                         },
                         "month": {
                             "type": "string",
-                            "description": "Optional month filter",
+                            "description": "Month filter (e.g., 'July 2025')",
                         },
                     },
                     "required": [],
