@@ -769,14 +769,15 @@ class LocalExecutor:
         return df
 
     def analyze_weekend_vs_weekday(
-        self, route_id: str = None, service: str = None, month: str = None
+        self, service: str = None, month: str = None
     ) -> pd.DataFrame:
         """
         Compare weekend vs weekday performance using Daily Summary data.
 
+        Note: Daily data is aggregated by Service only, not by individual routes.
+
         Args:
-            route_id: Optional route ID to filter by
-            service: Optional service type filter
+            service: Optional service type filter (Urban/Intercity/Feeder/Seasonal)
             month: Optional month filter
 
         Returns:
@@ -787,10 +788,6 @@ class LocalExecutor:
 
         if df.empty:
             return pd.DataFrame({"Message": ["No daily summary data available"]})
-
-        # Filter by route_id if provided
-        if route_id:
-            df = df[df["Route"].astype(str) == str(route_id)]
 
         # Filter by service if provided
         if service:

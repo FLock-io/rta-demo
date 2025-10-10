@@ -374,18 +374,21 @@ It supports to click the route name (right upper corner) to display the route sh
 ---
 
 ### 10. Weekend vs Weekday Analysis (`analyze_weekend_vs_weekday`)
-(need to improve)
 
 **Compare Weekend vs Weekday Performance**
 
 **Supported Queries:**
 ```
 "Compare weekend vs weekday performance"
+"Weekend vs weekday for Urban service"
+"Weekend vs weekday in July 2025"
 ```
 
 **Parameters:**
-- `service`: Service type (optional)
-- `month`: Month filter (optional)
+- `service`: Service type (Urban/Intercity/Feeder/Seasonal) - optional
+- `month`: Month filter (e.g., 'July 2025') - optional
+
+**Note:** This analysis uses Daily Summary data which is aggregated by Service, not by individual routes. Route-level weekend/weekday analysis is not supported.
 
 
 
