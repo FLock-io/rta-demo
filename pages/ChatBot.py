@@ -6,6 +6,7 @@ AI-powered conversational interface for transit data analysis
 import streamlit as st
 import sys
 from pathlib import Path
+import pandas as pd
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -13,9 +14,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.llm_planner import LLMPlanner
 from src.local_executor import LocalExecutor
 from src.data_loader import DataLoader
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 def main():
@@ -157,34 +155,49 @@ def show_welcome_and_examples():
     #     st.rerun()
 
 
+def display_assumptions(assumptions_data):
+    """Display assumptions and interpretations"""
+    if assumptions_data.get("has_assumptions", False):
+        with st.expander("💡 Assumptions & Interpretation", expanded=True):
+            st.info("**How I interpreted your query:**")
+            
+            if assumptions_data.get("interpretation"):
+                st.write(assumptions_data["interpretation"])
+            
+            if assumptions_data.get("assumptions"):
+                st.write("**Key assumptions:**")
+                for assumption in assumptions_data["assumptions"]:
+                    st.write(f"• {assumption}")
+
+
 def display_execution_plan(plan):
     """Display execution plan in a collapsible format"""
+    # Display parameters outside the expander in fade color
+    for step in plan.get("steps", []):
+        if step.get("parameters"):
+            st.caption(f"Parameters: {step.get('parameters', {})}")
+    
     with st.expander("🔧 Execution Plan & Methodology", expanded=False):
         st.write(
             f"**Query Interpretation:** {plan.get('interpretation', 'Processing your request...')}"
         )
-
+        
         for i, step in enumerate(plan.get("steps", []), 1):
             status = "✅" if step.get("completed") else "⏳"
 
             st.write(
                 f"{status} **Step {i}:** {step.get('description', 'Unknown step')}"
             )
-            st.code(f"Function: {step.get('function', 'unknown')}")
-
-            if step.get("parameters"):
-                st.caption(f"Parameters: {step.get('parameters', {})}")
 
 
 def display_results(results, message_idx):
     """Display analysis results with unique keys based on message index"""
     for result_idx, result in enumerate(results):
         if result["type"] == "dataframe":
-            st.subheader(f"📊 {result['title']}")
+            # Just show the dataframe without the title
             st.dataframe(result["data"], use_container_width=True)
 
         elif result["type"] == "chart":
-            st.subheader(f"📈 {result['title']}")
             # Generate unique key based on message index and result index
             chart_key = f"chart_msg{message_idx}_result{result_idx}"
             st.plotly_chart(result["data"], use_container_width=True, key=chart_key)
@@ -193,8 +206,13 @@ def display_results(results, message_idx):
             st.metric(result["title"], result["value"], result.get("delta"))
 
         elif result["type"] == "text":
-            st.subheader(f"📝 {result['title']}")
-            st.write(result["content"])
+            # Handle both 'content' and 'data' keys for text results
+            if "content" in result:
+                st.write(result["content"])
+            elif "data" in result:
+                st.write(result["data"])
+            else:
+                st.write("No content available")
 
 
 if __name__ == "__main__":

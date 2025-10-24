@@ -18,6 +18,45 @@ class DataLoader:
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
+    def _sort_by_month(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Sort DataFrame by month in chronological order."""
+        if df.empty or 'Month' not in df.columns:
+            return df
+            
+        # Define month order mapping
+        month_order = {
+            'January': 1, 'February': 2, 'March': 3, 'April': 4,
+            'May': 5, 'June': 6, 'July': 7, 'August': 8,
+            'September': 9, 'October': 10, 'November': 11, 'December': 12
+        }
+        
+        # Extract month name and year from Month column
+        def get_month_sort_key(month_str):
+            try:
+                # Handle formats like "July 2025", "December 2024"
+                parts = month_str.split()
+                if len(parts) >= 2:
+                    month_name = parts[0]
+                    year = int(parts[1])
+                    month_num = month_order.get(month_name, 13)  # 13 for unknown months
+                    return (year, month_num)
+                else:
+                    return (9999, 13)  # Put unknown formats at end
+            except:
+                return (9999, 13)  # Put errors at end
+        
+        # Add sort key column
+        df = df.copy()
+        df['_sort_key'] = df['Month'].apply(get_month_sort_key)
+        
+        # Sort by the sort key
+        df = df.sort_values('_sort_key')
+        
+        # Remove the sort key column
+        df = df.drop('_sort_key', axis=1)
+        
+        return df
+
     def load_gtfs_data(self) -> Dict[str, pd.DataFrame]:
         """Load all GTFS files into pandas DataFrames."""
 
@@ -309,6 +348,10 @@ class DataLoader:
 
         combined = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
+        # Sort by month in chronological order
+        if not combined.empty and 'Month' in combined.columns:
+            combined = self._sort_by_month(combined)
+
         self.cache[cache_key] = combined
         self.logger.info(f"Combined monthly data: {len(combined)} rows from {len(dfs)} months")
         return combined
@@ -423,6 +466,10 @@ class DataLoader:
             dfs.append(df_copy)
 
         combined = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+        # Sort by month in chronological order
+        if not combined.empty and 'Month' in combined.columns:
+            combined = self._sort_by_month(combined)
 
         self.cache[cache_key] = combined
         self.logger.info(f"Combined totals summary: {len(combined)} rows from {len(dfs)} months")
