@@ -112,7 +112,7 @@ Format your response as a JSON object:
                     "interpretation": assumptions_text
                 }
         except Exception as e:
-            self.logger.warning(f"Could not analyze assumptions: {e}")
+            # Silently fallback if assumption analysis fails
             assumptions_data = {
                 "has_assumptions": False,
                 "assumptions": [],
