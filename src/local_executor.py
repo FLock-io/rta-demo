@@ -71,6 +71,12 @@ class LocalExecutor:
                     }
 
                     result = func(**valid_params)
+
+                    # Handle duplicate column names in DataFrames
+                    if isinstance(result, pd.DataFrame) and result.columns.duplicated().any():
+                        # Remove duplicate columns by keeping only the first occurrence
+                        result = result.loc[:, ~result.columns.duplicated()]
+
                     results.append(
                         {
                             "title": step.get("description", function_name),
@@ -198,11 +204,25 @@ class LocalExecutor:
                     zone_id_int = int(zone_id)
                     filtered_stops = stops[stops["zone_id"] == zone_id_int]
                     if filtered_stops.empty:
-                        return pd.DataFrame({"Message": [f"No stops found in zone {zone_id}. Available zones: {sorted(stops['zone_id'].unique().tolist())}"]})
+                        return pd.DataFrame(
+                            {
+                                "Message": [
+                                    f"No stops found in zone {zone_id}. Available zones: {sorted(stops['zone_id'].unique().tolist())}"
+                                ]
+                            }
+                        )
                     else:
-                        return filtered_stops[["stop_id", "stop_name", "stop_lat", "stop_lon", "zone_id"]]
+                        return filtered_stops[
+                            ["stop_id", "stop_name", "stop_lat", "stop_lon", "zone_id"]
+                        ]
                 except ValueError:
-                    return pd.DataFrame({"Message": [f"Invalid zone_id: {zone_id}. Zone IDs must be numeric."]})
+                    return pd.DataFrame(
+                        {
+                            "Message": [
+                                f"Invalid zone_id: {zone_id}. Zone IDs must be numeric."
+                            ]
+                        }
+                    )
             else:
                 # Return zone counts for all zones
                 zone_counts = stops["zone_id"].value_counts()
@@ -235,7 +255,9 @@ class LocalExecutor:
 
         return result.sort_values("trip_count", ascending=False).head(20)
 
-    def generate_route_map(self, route_ids: List[str] = None, max_routes: int = 10) -> go.Figure:
+    def generate_route_map(
+        self, route_ids: List[str] = None, max_routes: int = 10
+    ) -> go.Figure:
         """Draw route shapes on a map with distinct colors and unique route names."""
         shapes = self.data_loader.get_shapes()
         trips = self.data_loader.get_trips()
@@ -246,20 +268,26 @@ class LocalExecutor:
             routes[["route_id", "route_short_name", "route_long_name"]],
             on="route_id",
             how="left",
-        )[["shape_id", "route_id", "route_short_name", "route_long_name"]].drop_duplicates()
+        )[
+            ["shape_id", "route_id", "route_short_name", "route_long_name"]
+        ].drop_duplicates()
 
         # Filter by specific route_ids if provided (match by route_id OR route_short_name)
         if route_ids:
             shape_to_route = shape_to_route[
-                shape_to_route["route_id"].isin(route_ids) | 
-                shape_to_route["route_short_name"].isin(route_ids)
+                shape_to_route["route_id"].isin(route_ids)
+                | shape_to_route["route_short_name"].isin(route_ids)
             ]
             if shape_to_route.empty:
                 # Return empty map with message
                 fig = go.Figure()
                 fig.update_layout(
                     title=f"No routes found for: {', '.join(route_ids)}",
-                    mapbox=dict(style="open-street-map", center=dict(lat=25.2048, lon=55.2708), zoom=10),
+                    mapbox=dict(
+                        style="open-street-map",
+                        center=dict(lat=25.2048, lon=55.2708),
+                        zoom=10,
+                    ),
                     height=600,
                 )
                 return fig
@@ -352,20 +380,25 @@ class LocalExecutor:
 
         return fig
 
-    def generate_stops_map(self, zone_ids: List[int] = None, max_stops: int = 100) -> go.Figure:
+    def generate_stops_map(
+        self, zone_ids: List[int] = None, max_stops: int = 100
+    ) -> go.Figure:
         """Plot stops on a map, optionally filtered by zone(s)."""
         stops = self.data_loader.get_stops()
-        
+
         if stops.empty:
             fig = go.Figure()
             fig.add_annotation(
                 text="No stops data available",
-                xref="paper", yref="paper",
-                x=0.5, y=0.5, showarrow=False,
-                font=dict(size=16)
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=16),
             )
             return fig
-        
+
         # Filter by zones if provided
         if zone_ids:
             stops = stops[stops["zone_id"].isin(zone_ids)]
@@ -373,31 +406,46 @@ class LocalExecutor:
                 fig = go.Figure()
                 fig.add_annotation(
                     text=f"No stops found in zone(s): {', '.join(map(str, zone_ids))}",
-                    xref="paper", yref="paper",
-                    x=0.5, y=0.5, showarrow=False,
-                    font=dict(size=16)
+                    xref="paper",
+                    yref="paper",
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                    font=dict(size=16),
                 )
                 return fig
-        
+
         # Limit to max_stops if not filtering by zone
         if not zone_ids and len(stops) > max_stops:
             stops = stops.head(max_stops)
-        
+
         fig = go.Figure()
-        
+
         # Define color palette for zones
         colors = [
-            "#e6194b", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4",
-            "#46f0f0", "#f032e6", "#bcf60c", "#fabebe", "#008080", "#e6beff",
-            "#9a6324", "#fffac8", "#800000",
+            "#e6194b",
+            "#3cb44b",
+            "#ffe119",
+            "#4363d8",
+            "#f58231",
+            "#911eb4",
+            "#46f0f0",
+            "#f032e6",
+            "#bcf60c",
+            "#fabebe",
+            "#008080",
+            "#e6beff",
+            "#9a6324",
+            "#fffac8",
+            "#800000",
         ]
-        
+
         # Group stops by zone for colored markers
         if "zone_id" in stops.columns:
             zones = stops["zone_id"].unique()
             for idx, zone in enumerate(sorted(zones)):
                 zone_stops = stops[stops["zone_id"] == zone]
-                
+
                 fig.add_trace(
                     go.Scattermapbox(
                         lat=zone_stops["stop_lat"],
@@ -406,11 +454,11 @@ class LocalExecutor:
                         name=f"Zone {zone}",
                         marker=dict(size=10, color=colors[idx % len(colors)]),
                         text=zone_stops["stop_name"],
-                        hovertemplate="<b>%{text}</b><br>" +
-                                    f"Zone: {zone}<br>" +
-                                    "Lat: %{lat:.5f}<br>" +
-                                    "Lon: %{lon:.5f}<br>" +
-                                    "<extra></extra>",
+                        hovertemplate="<b>%{text}</b><br>"
+                        + f"Zone: {zone}<br>"
+                        + "Lat: %{lat:.5f}<br>"
+                        + "Lon: %{lon:.5f}<br>"
+                        + "<extra></extra>",
                     )
                 )
         else:
@@ -423,41 +471,41 @@ class LocalExecutor:
                     name="Stops",
                     marker=dict(size=10, color="#e6194b"),
                     text=stops["stop_name"],
-                    hovertemplate="<b>%{text}</b><br>" +
-                                "Lat: %{lat:.5f}<br>" +
-                                "Lon: %{lon:.5f}<br>" +
-                                "<extra></extra>",
+                    hovertemplate="<b>%{text}</b><br>"
+                    + "Lat: %{lat:.5f}<br>"
+                    + "Lon: %{lon:.5f}<br>"
+                    + "<extra></extra>",
                 )
             )
-        
+
         # Calculate center and zoom
         center_lat = stops["stop_lat"].mean()
         center_lon = stops["stop_lon"].mean()
-        
+
         # Adjust zoom based on spread of stops
         lat_range = stops["stop_lat"].max() - stops["stop_lat"].min()
         lon_range = stops["stop_lon"].max() - stops["stop_lon"].min()
         max_range = max(lat_range, lon_range)
-        
+
         if max_range < 0.1:
             zoom = 12
         elif max_range < 0.5:
             zoom = 10
         else:
             zoom = 9
-        
+
         # Create title
         if zone_ids:
             zone_str = ", ".join(map(str, zone_ids))
             title = f"Stops in Zone(s) {zone_str} ({len(stops)} stops)"
         else:
             title = f"RTA Stop Network (Showing {len(stops)} stops)"
-        
+
         fig.update_layout(
             mapbox=dict(
-                style="open-street-map", 
-                center=dict(lat=center_lat, lon=center_lon), 
-                zoom=zoom
+                style="open-street-map",
+                center=dict(lat=center_lat, lon=center_lon),
+                zoom=zoom,
             ),
             height=600,
             title=title,
@@ -470,7 +518,7 @@ class LocalExecutor:
                 bgcolor="rgba(255,255,255,0.8)",
             ),
         )
-        
+
         return fig
 
     def get_transfer_points(self) -> pd.DataFrame:
@@ -620,7 +668,11 @@ class LocalExecutor:
         return result.head(limit)
 
     def get_crr_analysis(
-        self, route_id: str = None, service: str = None, month: str = None, limit: int = 20
+        self,
+        route_id: str = None,
+        service: str = None,
+        month: str = None,
+        limit: int = 20,
     ) -> pd.DataFrame:
         """
         Analyze Cost Recovery Ratio (CRR) - Revenue vs Cost efficiency.
@@ -669,7 +721,11 @@ class LocalExecutor:
         return result.head(limit)
 
     def get_ridership_trends(
-        self, route_id: str = None, service: str = None, month: str = None, limit: int = None
+        self,
+        route_id: str = None,
+        service: str = None,
+        month: str = None,
+        limit: int = None,
     ) -> pd.DataFrame:
         """
         Analyze ridership trends over time (checkins/checkouts).
@@ -775,7 +831,11 @@ class LocalExecutor:
         return result.head(limit)
 
     def get_cost_efficiency(
-        self, route_id: str = None, service: str = None, month: str = None, limit: int = 20
+        self,
+        route_id: str = None,
+        service: str = None,
+        month: str = None,
+        limit: int = 20,
     ) -> pd.DataFrame:
         """
         Analyze cost efficiency metrics.
@@ -849,7 +909,12 @@ class LocalExecutor:
         return df
 
     def get_top_routes_by_kpi(
-        self, kpi: str, service: str = None, months: List[str] = None, limit: int = 10, ascending: bool = False
+        self,
+        kpi: str,
+        service: str = None,
+        months: List[str] = None,
+        limit: int = 10,
+        ascending: bool = False,
     ) -> pd.DataFrame:
         """
         Get top routes ranked by a specific KPI.
@@ -877,10 +942,12 @@ class LocalExecutor:
             for month in months:
                 month_filters.append(month)
                 month_filters.append(month.replace(" ", "-"))
-            
+
             df = df[df["Month"].isin(month_filters)]
             if df.empty:
-                return pd.DataFrame({"Message": [f"No data available for {', '.join(months)}"]})
+                return pd.DataFrame(
+                    {"Message": [f"No data available for {', '.join(months)}"]}
+                )
 
         # Filter by service if provided
         if service:
@@ -999,18 +1066,18 @@ class LocalExecutor:
             )
 
     def query_multi_month_data(
-        self, 
-        months: List[str], 
-        service: str = None, 
+        self,
+        months: List[str],
+        service: str = None,
         route_id: str = None,
         kpis: List[str] = None,
         filters: Dict[str, Any] = None,
         group_by: List[str] = None,
-        aggregation: str = "sum"
+        aggregation: str = "sum",
     ) -> pd.DataFrame:
         """
         Query multiple months of data with SQL-like operations.
-        
+
         Args:
             months: List of months to query (e.g., ['July 2025', 'September 2024'])
             service: Optional service type filter
@@ -1019,7 +1086,7 @@ class LocalExecutor:
             filters: Optional dictionary of additional filters
             group_by: Optional list of columns to group by
             aggregation: Aggregation method ('sum', 'mean', 'max', 'min', 'count')
-            
+
         Returns:
             DataFrame with queried and aggregated data
         """
@@ -1028,17 +1095,17 @@ class LocalExecutor:
             df = self.data_loader.get_totals_summary(months=months)
         else:
             df = self.data_loader.get_monthly_data(months=months)
-        
+
         if df.empty:
             return pd.DataFrame({"Message": [f"No data found for months: {months}"]})
-        
+
         # Apply filters
         if service:
-            df = df[df['Service'].str.lower() == service.lower()]
-        
+            df = df[df["Service"].str.lower() == service.lower()]
+
         if route_id:
-            df = df[df['Route'].astype(str) == str(route_id)]
-        
+            df = df[df["Route"].astype(str) == str(route_id)]
+
         # Apply additional filters
         if filters:
             for column, value in filters.items():
@@ -1047,20 +1114,20 @@ class LocalExecutor:
                         df = df[df[column].isin(value)]
                     else:
                         df = df[df[column] == value]
-        
+
         # Select specific KPIs if requested
         if kpis:
             available_kpis = [kpi for kpi in kpis if kpi in df.columns]
             if available_kpis:
                 # Always include Month and Service columns for context
-                columns_to_include = ['Month']
-                if 'Service' in df.columns:
-                    columns_to_include.append('Service')
-                if 'Route' in df.columns:
-                    columns_to_include.append('Route')
+                columns_to_include = ["Month"]
+                if "Service" in df.columns:
+                    columns_to_include.append("Service")
+                if "Route" in df.columns:
+                    columns_to_include.append("Route")
                 columns_to_include.extend(available_kpis)
                 df = df[columns_to_include]
-        
+
         # Apply grouping and aggregation
         if group_by and aggregation != "none":
             # Ensure group_by columns exist
@@ -1070,16 +1137,26 @@ class LocalExecutor:
                 numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
                 if numeric_cols:
                     if aggregation == "sum":
-                        df = df.groupby(valid_group_by)[numeric_cols].sum().reset_index()
+                        df = (
+                            df.groupby(valid_group_by)[numeric_cols].sum().reset_index()
+                        )
                     elif aggregation == "mean":
-                        df = df.groupby(valid_group_by)[numeric_cols].mean().reset_index()
+                        df = (
+                            df.groupby(valid_group_by)[numeric_cols]
+                            .mean()
+                            .reset_index()
+                        )
                     elif aggregation == "max":
-                        df = df.groupby(valid_group_by)[numeric_cols].max().reset_index()
+                        df = (
+                            df.groupby(valid_group_by)[numeric_cols].max().reset_index()
+                        )
                     elif aggregation == "min":
-                        df = df.groupby(valid_group_by)[numeric_cols].min().reset_index()
+                        df = (
+                            df.groupby(valid_group_by)[numeric_cols].min().reset_index()
+                        )
                     elif aggregation == "count":
-                        df = df.groupby(valid_group_by).size().reset_index(name='count')
-        
+                        df = df.groupby(valid_group_by).size().reset_index(name="count")
+
         return df
 
     def aggregate_monthly_data(
@@ -1087,17 +1164,17 @@ class LocalExecutor:
         months: List[str],
         service: str = None,
         kpis: List[str] = None,
-        aggregation: str = "sum"
+        aggregation: str = "sum",
     ) -> pd.DataFrame:
         """
         Aggregate data across multiple months.
-        
+
         Args:
             months: List of months to aggregate
             service: Optional service type filter
             kpis: Optional list of KPIs to aggregate
             aggregation: Aggregation method ('sum', 'mean', 'max', 'min')
-            
+
         Returns:
             DataFrame with aggregated results
         """
@@ -1106,25 +1183,25 @@ class LocalExecutor:
             df = self.data_loader.get_totals_summary(months=months)
         else:
             df = self.data_loader.get_monthly_data(months=months)
-        
+
         if df.empty:
             return pd.DataFrame({"Message": [f"No data found for months: {months}"]})
-        
+
         # Filter by service if provided
         if service:
-            df = df[df['Service'].str.lower() == service.lower()]
-        
+            df = df[df["Service"].str.lower() == service.lower()]
+
         # Select KPIs if specified
         if kpis:
             available_kpis = [kpi for kpi in kpis if kpi in df.columns]
             if available_kpis:
                 # Include context columns
-                columns_to_include = ['Month']
-                if 'Service' in df.columns:
-                    columns_to_include.append('Service')
+                columns_to_include = ["Month"]
+                if "Service" in df.columns:
+                    columns_to_include.append("Service")
                 columns_to_include.extend(available_kpis)
                 df = df[columns_to_include]
-        
+
         # Aggregate across months
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
         if numeric_cols:
@@ -1136,15 +1213,15 @@ class LocalExecutor:
                 result = df[numeric_cols].max()
             elif aggregation == "min":
                 result = df[numeric_cols].min()
-            
+
             # Convert to DataFrame
             result_df = pd.DataFrame([result])
-            result_df['Period'] = f"{months[0]} to {months[-1]}"
+            result_df["Period"] = f"{months[0]} to {months[-1]}"
             if service:
-                result_df['Service'] = service
-            
+                result_df["Service"] = service
+
             return result_df
-        
+
         return df
 
     def calculate_percentage_change(
@@ -1153,18 +1230,18 @@ class LocalExecutor:
         month2: str,
         service: str = None,
         kpis: List[str] = None,
-        route_id: str = None
+        route_id: str = None,
     ) -> pd.DataFrame:
         """
         Calculate percentage change between two months for specified KPIs.
-        
+
         Args:
             month1: First month (baseline)
             month2: Second month (comparison)
             service: Optional service type filter
             kpis: Optional list of KPIs to calculate change for
             route_id: Optional route ID filter
-            
+
         Returns:
             DataFrame with percentage change calculations
         """
@@ -1173,83 +1250,93 @@ class LocalExecutor:
             df = self.data_loader.get_totals_summary(months=[month1, month2])
         else:
             df = self.data_loader.get_monthly_data(months=[month1, month2])
-        
+
         if df.empty:
-            return pd.DataFrame({"Message": [f"No data found for months: {month1}, {month2}"]})
-        
+            return pd.DataFrame(
+                {"Message": [f"No data found for months: {month1}, {month2}"]}
+            )
+
         # Apply filters
         if service:
-            df = df[df['Service'].str.lower() == service.lower()]
-        
+            df = df[df["Service"].str.lower() == service.lower()]
+
         if route_id:
-            df = df[df['Route'].astype(str) == str(route_id)]
-        
+            df = df[df["Route"].astype(str) == str(route_id)]
+
         # Get data for each month
-        month1_data = df[df['Month'] == month1]
-        month2_data = df[df['Month'] == month2]
-        
+        month1_data = df[df["Month"] == month1]
+        month2_data = df[df["Month"] == month2]
+
         if month1_data.empty or month2_data.empty:
             return pd.DataFrame({"Message": [f"Missing data for {month1} or {month2}"]})
-        
+
         # Determine KPIs to calculate
         if kpis:
             available_kpis = [kpi for kpi in kpis if kpi in df.columns]
         else:
             # Default KPIs for percentage change
             numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-            available_kpis = [col for col in numeric_cols if col not in ['Month']]
-        
+            available_kpis = [col for col in numeric_cols if col not in ["Month"]]
+
         if not available_kpis:
-            return pd.DataFrame({"Message": ["No numeric KPIs found for percentage calculation"]})
-        
+            return pd.DataFrame(
+                {"Message": ["No numeric KPIs found for percentage calculation"]}
+            )
+
         # Calculate percentage changes
         results = []
-        
+
         for kpi in available_kpis:
             if kpi in month1_data.columns and kpi in month2_data.columns:
                 # Get values (handle multiple rows by taking mean)
                 val1 = month1_data[kpi].mean()
                 val2 = month2_data[kpi].mean()
-                
+
                 # Calculate percentage change
                 if val1 != 0:
                     pct_change = ((val2 - val1) / val1) * 100
                 else:
-                    pct_change = float('inf') if val2 > 0 else 0
-                
-                results.append({
-                    'KPI': kpi,
-                    f'{month1}_Value': val1,
-                    f'{month2}_Value': val2,
-                    'Absolute_Change': val2 - val1,
-                    'Percentage_Change': pct_change,
-                    'Direction': 'Increase' if pct_change > 0 else 'Decrease' if pct_change < 0 else 'No Change'
-                })
-        
+                    pct_change = float("inf") if val2 > 0 else 0
+
+                results.append(
+                    {
+                        "KPI": kpi,
+                        f"{month1}_Value": val1,
+                        f"{month2}_Value": val2,
+                        "Absolute_Change": val2 - val1,
+                        "Percentage_Change": pct_change,
+                        "Direction": (
+                            "Increase"
+                            if pct_change > 0
+                            else "Decrease" if pct_change < 0 else "No Change"
+                        ),
+                    }
+                )
+
         if not results:
-            return pd.DataFrame({"Message": ["No valid KPIs found for percentage calculation"]})
-        
+            return pd.DataFrame(
+                {"Message": ["No valid KPIs found for percentage calculation"]}
+            )
+
         result_df = pd.DataFrame(results)
-        
+
         # Add context information
-        result_df['Service'] = service if service else 'All Services'
-        result_df['Route'] = route_id if route_id else 'All Routes'
-        result_df['Comparison_Period'] = f"{month1} to {month2}"
-        
+        result_df["Service"] = service if service else "All Services"
+        result_df["Route"] = route_id if route_id else "All Routes"
+        result_df["Comparison_Period"] = f"{month1} to {month2}"
+
         return result_df
 
     def execute_sql_query(
-        self,
-        sql_query: str,
-        months: List[str] = None
+        self, sql_query: str, months: List[str] = None
     ) -> pd.DataFrame:
         """
         Execute SQL query on transit data.
-        
+
         Args:
             sql_query: SQL query to execute
             months: Optional list of months to filter data (loads only these months)
-            
+
         Returns:
             DataFrame with query results
         """
