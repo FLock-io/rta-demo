@@ -12,14 +12,9 @@ echo.
 REM ========================================
 REM 1. Configuration & Environment Variables
 REM ========================================
-REM ----------------------------------------
-REM PLEASE SET YOUR ENVIRONMENT VARIABLES BELOW
-REM ----------------------------------------
 
-REM Example: set OPENAI_API_KEY=your_key_here
-REM set OPENAI_API_KEY=
-
-REM ----------------------------------------
+set OPENAI_API_KEY=
+set OPENAI_BASE_URL=
 
 set REPO_URL=https://github.com/FLock-io/rta-demo.git
 set TARGET_BRANCH=feat/add-windows-bat
