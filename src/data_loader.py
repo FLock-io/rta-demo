@@ -5,6 +5,12 @@ from typing import Dict, Optional, List
 import logging
 from glob import glob
 import re
+import requests
+import urllib3
+from datetime import datetime
+
+# Disable SSL warnings for intranet
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 class DataLoader:
@@ -17,6 +23,64 @@ class DataLoader:
         # Set up logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
+        
+        # Try to sync data from intranet on init
+        self.sync_intranet_data()
+
+    def _generate_month_year_pairs(self):
+        """Generate (MonthName, Year) pairs for the range Nov 2022 - Oct 2025."""
+        start_date = datetime(2022, 11, 1)
+        end_date = datetime(2025, 10, 1)
+        
+        pairs = []
+        current_date = start_date
+        while current_date <= end_date:
+            month_name = current_date.strftime('%B')
+            year = current_date.year
+            pairs.append((month_name, year))
+            
+            # Increment month
+            if current_date.month == 12:
+                current_date = datetime(current_date.year + 1, 1, 1)
+            else:
+                current_date = datetime(current_date.year, current_date.month + 1, 1)
+                
+        return pairs
+
+    def sync_intranet_data(self):
+        """Download missing files from intranet for the period Nov 2022 - Oct 2025."""
+        base_url = "https://intranet.rta.ae/sites/rta/PTA/TTSS/Statistics/Released/For%20Planning/Route%20Summary%20PBD%20Dash/"
+        
+        # Ensure directory exists
+        self.route_summary_folder.mkdir(parents=True, exist_ok=True)
+        
+        months = self._generate_month_year_pairs()
+        
+        self.logger.info("Checking for missing data files from intranet...")
+        
+        for month_name, year in months:
+            filename = f"Route Summary for PBD Dashboard {month_name} {year}.xlsx"
+            file_path = self.route_summary_folder / filename
+            
+            if not file_path.exists():
+                # URL encode spaces
+                url_filename = filename.replace(" ", "%20")
+                url = base_url + url_filename
+                
+                try:
+                    self.logger.info(f"Downloading {filename}...")
+                    # Verify=False because intranet certs are often self-signed/internal
+                    response = requests.get(url, verify=False, timeout=30)
+                    
+                    if response.status_code == 200:
+                        with open(file_path, 'wb') as f:
+                            f.write(response.content)
+                        self.logger.info(f"Successfully downloaded {filename}")
+                    else:
+                        # Don't log error for future months that don't exist yet, just debug/warning
+                        self.logger.debug(f"Could not download {filename}: Status {response.status_code}")
+                except Exception as e:
+                    self.logger.error(f"Error downloading {filename}: {e}")
 
     def _sort_by_month(self, df: pd.DataFrame) -> pd.DataFrame:
         """Sort DataFrame by month in chronological order."""

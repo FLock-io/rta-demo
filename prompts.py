@@ -22,7 +22,11 @@ class RTAPrompts:
 
 Available Data Sources:
 1. GTFS Data (Open): Route information, stops, schedules, network topology
-2. TTSS Data (Confidential, 12 months Sep 2024-Aug 2025): Performance KPIs, ridership, revenue, costs
+   - GTFS is a STATIC SNAPSHOT representing the current transit network structure
+   - It contains route definitions, stop locations, and schedules that are valid across all time periods
+   - Use GTFS data with ANY month's TTSS data for combined analysis (e.g., joining route info with monthly performance)
+2. TTSS Data (Confidential): Performance KPIs, ridership, revenue, costs
+   - Contains operational metrics from November 2022 to October 2025 (monthly data)
 
 Function Categories:
 - GTFS Functions (10): Basic route/stop info, maps, frequency analysis
@@ -56,7 +60,13 @@ Key Guidelines:
 - NEVER return all data when user asks for specific filters
 
 Service Types: Urban, Intercity, Feeder, Seasonal
-Months Available: September 2024 through August 2025
+Months Available: November 2022 to October 2025
+
+IMPORTANT - GTFS + TTSS Integration:
+- GTFS data (routes, stops, shapes, etc.) is a STATIC snapshot of the network structure
+- GTFS can be joined with ANY month's TTSS data for combined analysis
+- Example: To analyze "revenue by zone" for January 2024, join monthly_data with stops table - the GTFS stops data is valid for all months
+- The same GTFS route/stop definitions apply across all TTSS months
 
 Examples of proper parameter extraction:
 
@@ -96,12 +106,13 @@ CRITICAL - Understanding Data Source Limitations:
 1. GTFS data:
    - routes, stops tables: STATIC definitions (no temporal fields)
    - calendar table: Has start_date/end_date for SERVICE schedules, NOT route operational history
-   - GTFS is a snapshot representing current/planned service, not historical changes
+   - GTFS is a snapshot representing current/planned service - it is VALID FOR ALL MONTHS
    - Classification: route_type (1=Metro, 3=Bus, etc.)
    - Use GTFS for: current route definitions, stop locations, network topology, schedule structure
+   - GTFS can be JOINED with ANY month's TTSS data (e.g., join stops with any month's revenue data for zone analysis)
 
 2. TTSS tables (monthly_data, daily_data, totals_summary):
-   - Has 12 months of ACTUAL operational history (Sep 2024 - Aug 2025)
+   - Has ACTUAL operational history from November 2022 to October 2025
    - Month/Date columns track real performance over time
    - Classification: Service field with values "Urban", "Intercity", "Feeder", "Seasonal" (NOT "bus" or "metro"!)
    - Use TTSS for: historical analysis, trends, route changes over time, performance metrics
@@ -127,6 +138,12 @@ For SQL queries with "bus routes":
    - GTFS calendar only shows service schedule validity, not historical route changes
    - To find new/removed routes: Compare DISTINCT Route values across different months in monthly_data
    - ALWAYS add a Status/Category column to indicate the type of change (e.g., "New", "Removed", "Added", "Excluded")
+
+4. GTFS + TTSS Combined Queries:
+   - GTFS data (routes, stops, shapes) is a STATIC snapshot valid for ALL time periods
+   - You can JOIN GTFS tables with ANY month's TTSS data
+   - Example: "revenue by zone for December 2023" - join monthly_data with stops table (GTFS stops are valid for Dec 2023)
+   - Example: "OTP by route type for all of 2024" - join monthly_data with routes table to get route_type
 
 CRITICAL - Adding Context Columns to Results:
 When queries ask about multiple categories (new vs removed, best vs worst, different services, etc.), ALWAYS add a descriptive column to label each row:
@@ -471,7 +488,7 @@ Provide responses with:
         return """
 Analyze TTSS (Transit Tracking & Scheduling System) Key Performance Indicators:
 
-Available KPIs (12 months data: Sep 2024 - Aug 2025):
+Available KPIs (November 2022 to October 2025):
 
 1. On-Time Performance (OTP%):
    - Target: >85% for Urban, >90% for Intercity
@@ -490,7 +507,7 @@ Available KPIs (12 months data: Sep 2024 - Aug 2025):
 
 4. Ridership Metrics:
    - Checkins/Checkouts per route
-   - Trends over 12 months
+   - Trends over the available period (Nov 2022 - Oct 2025)
    - Service type comparisons
 
 5. Operational Efficiency:
@@ -549,7 +566,7 @@ Comparison Types:
    - Area coverage analysis
 
 Analysis Guidelines:
-- Use 12 months data for trends (Sep 2024 - Aug 2025)
+- Use all available historical data for trends (Nov 2022 - Oct 2025)
 - Calculate percentage changes
 - Identify significant variations
 - Contextualize with industry benchmarks
@@ -614,8 +631,8 @@ Diagnostic Approach:
 You are analyzing Dubai RTA transit data through a conversational interface.
 
 Data Access:
-- GTFS: Static route/stop information, schedules
-- TTSS: 12 months operational KPIs (Sep 2024 - Aug 2025)
+- GTFS: Static route/stop information, schedules (valid for all time periods)
+- TTSS: Operational KPIs from November 2022 to October 2025
 
 Response Style:
 - Be concise and data-driven
@@ -645,7 +662,7 @@ If data is unavailable:
             Prompt for monthly analysis
         """
         return """
-Analyze monthly trends using TTSS data (12 months: Sep 2024 - Aug 2025):
+Analyze monthly trends using TTSS data (November 2022 to October 2025):
 
 Monthly Analysis Focus Areas:
 
@@ -1012,7 +1029,7 @@ Forecasting Framework:
    - Capacity constraints
 
 Forecasting Approach:
-- Use 12-month historical baseline
+- Use all available historical data as baseline (Nov 2022 - Oct 2025)
 - Apply seasonal factors
 - Consider known upcoming changes
 - Provide confidence ranges
