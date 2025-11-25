@@ -54,6 +54,18 @@ class DataLoader:
         # Ensure directory exists
         self.route_summary_folder.mkdir(parents=True, exist_ok=True)
         
+        # First, check if intranet is reachable with a quick test
+        try:
+            test_response = requests.head(base_url, verify=False, timeout=5)
+            intranet_available = test_response.status_code < 500
+        except Exception:
+            self.logger.warning("RTA Intranet not reachable. Skipping data sync. Using local files if available.")
+            return
+        
+        if not intranet_available:
+            self.logger.warning("RTA Intranet not available. Skipping data sync.")
+            return
+        
         months = self._generate_month_year_pairs()
         
         self.logger.info("Checking for missing data files from intranet...")
