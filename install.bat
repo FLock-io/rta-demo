@@ -13,8 +13,12 @@ REM ========================================
 REM 1. Configuration & Environment Variables
 REM ========================================
 
-set OPENAI_API_KEY=
-set OPENAI_BASE_URL=
+REM =====================================================
+REM SET YOUR API CREDENTIALS HERE:
+REM =====================================================
+set "OPENAI_API_KEY="
+set "OPENAI_BASE_URL="
+REM =====================================================
 
 set REPO_URL=https://github.com/FLock-io/rta-demo.git
 set TARGET_BRANCH=feat/add-windows-bat
