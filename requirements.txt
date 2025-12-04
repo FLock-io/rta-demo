@@ -10,3 +10,4 @@ pathlib2>=2.3.7
 typing-extensions>=4.5.0
 pandasql>=0.7.3
 requests>=2.31.0
+requests-negotiate-sspi>=0.5.2

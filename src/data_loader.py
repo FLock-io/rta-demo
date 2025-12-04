@@ -8,6 +8,7 @@ import re
 import requests
 import urllib3
 from datetime import datetime
+from requests_negotiate_sspi import HttpNegotiateAuth
 
 # Disable SSL warnings for intranet
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -50,13 +51,14 @@ class DataLoader:
     def sync_intranet_data(self):
         """Download missing files from intranet for the period Nov 2022 - Oct 2025."""
         base_url = "https://intranet.rta.ae/sites/rta/PTA/TTSS/Statistics/Released/For%20Planning/Route%20Summary%20PBD%20Dash/"
-        
+        req = requests.Session()
+        req.auth = HttpNegotiateAuth()
         # Ensure directory exists
         self.route_summary_folder.mkdir(parents=True, exist_ok=True)
         
         # First, check if intranet is reachable with a quick test
         try:
-            test_response = requests.head(base_url, verify=False, timeout=5)
+            test_response = req.head(base_url, verify=False, timeout=5)
             intranet_available = test_response.status_code < 500
         except Exception:
             self.logger.warning("RTA Intranet not reachable. Skipping data sync. Using local files if available.")
@@ -82,7 +84,7 @@ class DataLoader:
                 try:
                     self.logger.info(f"Downloading {filename}...")
                     # Verify=False because intranet certs are often self-signed/internal
-                    response = requests.get(url, verify=False, timeout=30)
+                    response = req.get(url, verify=False, timeout=30)
                     
                     if response.status_code == 200:
                         with open(file_path, 'wb') as f:
