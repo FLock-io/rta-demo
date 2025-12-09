@@ -173,6 +173,13 @@ GTFS INFO QUERY Examples (use SQL - for data only, NOT maps):
 - "show all stops on route 28" → execute_sql_query(sql_query='SELECT DISTINCT s.stop_id, s.stop_name FROM stops s JOIN stop_times st ON s.stop_id = st.stop_id JOIN trips t ON st.trip_id = t.trip_id JOIN routes r ON t.route_id = r.route_id WHERE r.route_short_name="28"')
 - "stops in zone 5" → execute_sql_query(sql_query='SELECT stop_id, stop_name, stop_lat, stop_lon FROM stops WHERE zone_id=5')
 
+GTFS FREQUENCY/SCHEDULE Examples (use SQL for service frequency, headway, waiting time):
+- "average waiting time for route X25" → execute_sql_query(sql_query='SELECT r.route_short_name, COUNT(DISTINCT t.trip_id) as total_trips, ROUND(24.0 * 60 / COUNT(DISTINCT t.trip_id), 1) as avg_headway_minutes FROM routes r JOIN trips t ON r.route_id = t.route_id WHERE r.route_short_name="X25" GROUP BY r.route_short_name')
+- "service frequency for route 28" → execute_sql_query(sql_query='SELECT r.route_short_name, COUNT(DISTINCT t.trip_id) as daily_trips, ROUND(24.0 * 60 / COUNT(DISTINCT t.trip_id), 1) as avg_minutes_between_buses FROM routes r JOIN trips t ON r.route_id = t.route_id WHERE r.route_short_name="28" GROUP BY r.route_short_name')
+- "how often does route E100 run" → execute_sql_query(sql_query='SELECT r.route_short_name, r.route_long_name, COUNT(DISTINCT t.trip_id) as trips_per_day FROM routes r JOIN trips t ON r.route_id = t.route_id WHERE r.route_short_name="E100" GROUP BY r.route_short_name, r.route_long_name')
+- "headway for all metro routes" → execute_sql_query(sql_query='SELECT r.route_short_name, COUNT(DISTINCT t.trip_id) as trips, ROUND(24.0 * 60 / COUNT(DISTINCT t.trip_id), 1) as headway_minutes FROM routes r JOIN trips t ON r.route_id = t.route_id WHERE r.route_type=1 GROUP BY r.route_short_name ORDER BY headway_minutes')
+- "which routes have the shortest waiting time" → execute_sql_query(sql_query='SELECT r.route_short_name, COUNT(DISTINCT t.trip_id) as trips, ROUND(24.0 * 60 / COUNT(DISTINCT t.trip_id), 1) as avg_wait_minutes FROM routes r JOIN trips t ON r.route_id = t.route_id GROUP BY r.route_short_name ORDER BY avg_wait_minutes LIMIT 10')
+
 CRITICAL: When users refer to routes by display names (E100, 28, etc.), you MUST join with routes table and match on route_short_name, NOT route_id! route_id is an internal ID (e.g., "3051"), while route_short_name is the user-facing name (e.g., "E100").
 
 MAP QUERY Examples (use map functions - NEVER use SQL for maps):
