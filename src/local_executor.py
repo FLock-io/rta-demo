@@ -387,9 +387,9 @@ class LocalExecutor:
         return fig
 
     def generate_stops_map(
-        self, zone_ids: List[int] = None, max_stops: int = 100
+        self, zone_ids: List[int] = None, route_ids: List[str] = None, max_stops: int = 100
     ) -> go.Figure:
-        """Plot stops on a map, optionally filtered by zone(s)."""
+        """Plot stops on a map, optionally filtered by zone(s) or route(s)."""
         stops = self.data_loader.get_stops()
 
         if stops.empty:
@@ -404,6 +404,49 @@ class LocalExecutor:
                 font=dict(size=16),
             )
             return fig
+
+        # Filter by routes if provided
+        if route_ids:
+            # Get stops for these routes via GTFS data
+            stop_times = self.data_loader.get_stop_times()
+            trips = self.data_loader.get_trips()
+            routes = self.data_loader.get_routes()
+            
+            if not stop_times.empty and not trips.empty and not routes.empty:
+                # Filter routes by short name
+                route_filter = routes[routes["route_short_name"].isin(route_ids)]
+                if route_filter.empty:
+                    fig = go.Figure()
+                    fig.add_annotation(
+                        text=f"No routes found: {', '.join(route_ids)}",
+                        xref="paper",
+                        yref="paper",
+                        x=0.5,
+                        y=0.5,
+                        showarrow=False,
+                        font=dict(size=16),
+                    )
+                    return fig
+                
+                # Get trips for these routes
+                route_trip_ids = trips[trips["route_id"].isin(route_filter["route_id"])]["trip_id"]
+                # Get stop_ids for these trips
+                route_stop_ids = stop_times[stop_times["trip_id"].isin(route_trip_ids)]["stop_id"].unique()
+                # Filter stops
+                stops = stops[stops["stop_id"].isin(route_stop_ids)]
+                
+                if stops.empty:
+                    fig = go.Figure()
+                    fig.add_annotation(
+                        text=f"No stops found for route(s): {', '.join(route_ids)}",
+                        xref="paper",
+                        yref="paper",
+                        x=0.5,
+                        y=0.5,
+                        showarrow=False,
+                        font=dict(size=16),
+                    )
+                    return fig
 
         # Filter by zones if provided
         if zone_ids:
@@ -941,15 +984,9 @@ class LocalExecutor:
         if df.empty:
             return pd.DataFrame({"Message": ["No TTSS data available"]})
 
-        # Filter by months if provided (for hyphenated format)
+        # Filter by months if provided (Month format: "July 2025" with space)
         if months:
-            # Create list of both formats for all months
-            month_filters = []
-            for month in months:
-                month_filters.append(month)
-                month_filters.append(month.replace(" ", "-"))
-
-            df = df[df["Month"].isin(month_filters)]
+            df = df[df["Month"].isin(months)]
             if df.empty:
                 return pd.DataFrame(
                     {"Message": [f"No data available for {', '.join(months)}"]}

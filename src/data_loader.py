@@ -377,6 +377,26 @@ class DataLoader:
         Returns:
             DataFrame or None if not found
         """
+        # Check cache first
+        cache_key = f"single_month_{month}_{sheet_name}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        # Try to load just this specific file
+        filename = f"Route Summary for PBD Dashboard {month}.xlsx"
+        file_path = self.route_summary_folder / filename
+        
+        if file_path.exists():
+            try:
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
+                self.cache[cache_key] = df
+                self.logger.info(f"Loaded {month} {sheet_name}: {len(df)} rows")
+                return df
+            except Exception as e:
+                self.logger.error(f"Error loading {filename}: {e}")
+                return None
+        
+        # Fallback to checking all loaded data
         all_data = self.load_all_route_summaries(sheet_name=sheet_name)
 
         if month in all_data:
@@ -390,6 +410,41 @@ class DataLoader:
         self.logger.warning(f"Month '{month}' not found in Route Summary data")
         return None
 
+    def _load_specific_months(self, months: List[str], sheet_name: str) -> Dict[str, pd.DataFrame]:
+        """
+        Load only specific months from Route Summary files (optimized loading).
+        
+        Args:
+            months: List of month strings to load
+            sheet_name: Sheet to load from each file
+            
+        Returns:
+            Dictionary mapping month strings to DataFrames
+        """
+        result = {}
+        
+        for month in months:
+            # Check individual cache first
+            cache_key = f"single_month_{month}_{sheet_name}"
+            if cache_key in self.cache:
+                result[month] = self.cache[cache_key]
+                continue
+            
+            # Try to load this specific file
+            filename = f"Route Summary for PBD Dashboard {month}.xlsx"
+            file_path = self.route_summary_folder / filename
+            
+            if file_path.exists():
+                try:
+                    df = pd.read_excel(file_path, sheet_name=sheet_name)
+                    self.cache[cache_key] = df
+                    result[month] = df
+                    self.logger.info(f"Loaded {month} {sheet_name}: {len(df)} rows")
+                except Exception as e:
+                    self.logger.error(f"Error loading {filename}: {e}")
+        
+        return result
+
     def get_monthly_data(self, months: Optional[List[str]] = None) -> pd.DataFrame:
         """
         Get Monthly Data from Route Summary files, optionally filtered by months.
@@ -402,18 +457,18 @@ class DataLoader:
         Returns:
             Combined DataFrame with all monthly route data
         """
-        cache_key = f"monthly_data_combined_{months}"
+        cache_key = f"monthly_data_combined_{tuple(months) if months else 'all'}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        all_data = self.load_all_route_summaries(sheet_name='Monthly Data')
+        # OPTIMIZATION: If specific months requested, only load those files
+        if months:
+            all_data = self._load_specific_months(months, sheet_name='Monthly Data')
+        else:
+            all_data = self.load_all_route_summaries(sheet_name='Monthly Data')
 
         if not all_data:
             return pd.DataFrame()
-
-        # Filter by months if specified
-        if months:
-            all_data = {k: v for k, v in all_data.items() if k in months or k.lower() in [m.lower() for m in months]}
 
         # Combine all DataFrames
         dfs = []
@@ -426,8 +481,10 @@ class DataLoader:
 
         combined = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
-        # Sort by month in chronological order
+        # Normalize Month column format: "June-2025" → "June 2025"
+        # NOTE: This only transforms the loaded data, NOT the source Excel files
         if not combined.empty and 'Month' in combined.columns:
+            combined['Month'] = combined['Month'].str.replace('-', ' ')
             combined = self._sort_by_month(combined)
 
         self.cache[cache_key] = combined
@@ -445,18 +502,18 @@ class DataLoader:
         Returns:
             Combined DataFrame with all daily route data
         """
-        cache_key = f"daily_data_combined_{months}"
+        cache_key = f"daily_data_combined_{tuple(months) if months else 'all'}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        all_data = self.load_all_route_summaries(sheet_name='Daily Data')
+        # OPTIMIZATION: If specific months requested, only load those files
+        if months:
+            all_data = self._load_specific_months(months, sheet_name='Daily Data')
+        else:
+            all_data = self.load_all_route_summaries(sheet_name='Daily Data')
 
         if not all_data:
             return pd.DataFrame()
-
-        # Filter by months if specified
-        if months:
-            all_data = {k: v for k, v in all_data.items() if k in months or k.lower() in [m.lower() for m in months]}
 
         # Combine all DataFrames
         dfs = []
@@ -484,18 +541,18 @@ class DataLoader:
         Returns:
             Combined DataFrame with daily summary (aggregated by Date + Service)
         """
-        cache_key = f"daily_summary_combined_{months}"
+        cache_key = f"daily_summary_combined_{tuple(months) if months else 'all'}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        all_data = self.load_all_route_summaries(sheet_name='Daily Summary')
+        # OPTIMIZATION: If specific months requested, only load those files
+        if months:
+            all_data = self._load_specific_months(months, sheet_name='Daily Summary')
+        else:
+            all_data = self.load_all_route_summaries(sheet_name='Daily Summary')
 
         if not all_data:
             return pd.DataFrame()
-
-        # Filter by months if specified
-        if months:
-            all_data = {k: v for k, v in all_data.items() if k in months or k.lower() in [m.lower() for m in months]}
 
         # Combine all DataFrames
         dfs = []
@@ -523,18 +580,18 @@ class DataLoader:
         Returns:
             Combined DataFrame with totals summary (Urban/Intercity/Feeder aggregates)
         """
-        cache_key = f"totals_summary_combined_{months}"
+        cache_key = f"totals_summary_combined_{tuple(months) if months else 'all'}"
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        all_data = self.load_all_route_summaries(sheet_name='Totals Summary')
+        # OPTIMIZATION: If specific months requested, only load those files
+        if months:
+            all_data = self._load_specific_months(months, sheet_name='Totals Summary')
+        else:
+            all_data = self.load_all_route_summaries(sheet_name='Totals Summary')
 
         if not all_data:
             return pd.DataFrame()
-
-        # Filter by months if specified
-        if months:
-            all_data = {k: v for k, v in all_data.items() if k in months or k.lower() in [m.lower() for m in months]}
 
         # Combine all DataFrames
         dfs = []

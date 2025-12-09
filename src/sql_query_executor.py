@@ -39,13 +39,30 @@ class SQLQueryExecutor:
             return result
             
         except Exception as e:
-            error_msg = f"SQL Error: {str(e)}\n\nQuery attempted:\n{sql_query}\n\nPlease check:\n- Table names are correct\n- Column names with spaces use double quotes\n- Month format matches table (see schema)\n- Required JOINs are included for cross-table queries"
-            self.logger.error(error_msg)
-            # Return error as DataFrame so it displays nicely to user
+            error_str = str(e)
+            self.logger.error(f"SQL Error: {error_str}")
+            
+            # Create user-friendly error message
+            if "no such table" in error_str.lower():
+                table_name = error_str.split("no such table:")[-1].strip().split()[0] if "no such table:" in error_str.lower() else "unknown"
+                if "monthly_data" in error_str or "route_data" in error_str:
+                    friendly_msg = f"Route performance data (TTSS) is not available. Please ensure Route Summary Excel files are in the RouteSummary-OneYear folder."
+                elif "totals_summary" in error_str or "service_data" in error_str:
+                    friendly_msg = f"Service summary data (TTSS) is not available. Please ensure Route Summary Excel files are in the RouteSummary-OneYear folder."
+                else:
+                    friendly_msg = f"Table '{table_name}' not found. Available tables: routes, stops, trips, stop_times, calendar, shapes, transfers (GTFS) and monthly_data, totals_summary, daily_data, daily_summary (TTSS - requires Excel files)."
+            elif "no such column" in error_str.lower():
+                friendly_msg = f"Column not found. Remember: column names with spaces need double quotes (e.g., \"Unsettled Revenue\", \"OTP%\")."
+            elif "syntax error" in error_str.lower():
+                friendly_msg = f"SQL syntax error. Please check the query structure."
+            else:
+                friendly_msg = f"Query failed: {error_str[:150]}"
+            
+            # Return error as DataFrame with user-friendly message
             return pd.DataFrame({
-                "Error": ["SQL Query Failed"],
-                "Details": [str(e)],
-                "Query": [sql_query[:200] + "..." if len(sql_query) > 200 else sql_query]
+                "Status": ["Query Failed"],
+                "Message": [friendly_msg],
+                "Technical Details": [error_str[:300] if len(error_str) > 300 else error_str]
             })
     
     def _prepare_tables(self, months: Optional[list] = None) -> Dict[str, pd.DataFrame]:

@@ -194,8 +194,28 @@ def display_results(results, message_idx):
     """Display analysis results with unique keys based on message index"""
     for result_idx, result in enumerate(results):
         if result["type"] == "dataframe":
-            # Just show the dataframe without the title
-            st.dataframe(result["data"], use_container_width=True)
+            data = result["data"]
+            
+            # Check if this is an error result
+            if "Status" in data.columns and "Query Failed" in data["Status"].values:
+                # Display error with warning styling
+                st.error("Query could not be completed")
+                if "Message" in data.columns:
+                    st.warning(data["Message"].iloc[0])
+                if "Technical Details" in data.columns:
+                    with st.expander("Technical Details"):
+                        st.code(data["Technical Details"].iloc[0])
+            elif "Error" in data.columns:
+                # Legacy error format
+                st.error("Query failed")
+                if "Details" in data.columns:
+                    st.warning(data["Details"].iloc[0])
+            elif len(data) == 0:
+                # Empty result
+                st.info("No data found matching your query. This could mean:\n- The route/service doesn't exist in the data\n- The time period has no data\n- The filter criteria returned no matches")
+            else:
+                # Normal dataframe result
+                st.dataframe(data, use_container_width=True)
 
         elif result["type"] == "chart":
             # Generate unique key based on message index and result index

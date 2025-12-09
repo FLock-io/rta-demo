@@ -86,13 +86,13 @@ CRITICAL - Route-level vs Service-level:
 - For "all routes" / "bus routes" / "route performance" → USE monthly_data (has Route column)
 - For "service comparison" / "Urban vs Intercity" → USE totals_summary (aggregated by Service)
 
-ROUTE-LEVEL queries (use monthly_data - note hyphenated month format "November-2024"):
-- "summarise operational performance for all bus routes from Nov 2024 to Aug 2025" → execute_sql_query(sql_query='SELECT Route, Service, AVG("OTP%") as avg_otp, AVG("Load Factor") as avg_load_factor, SUM("Operated Rev Trips") as total_trips, SUM(Cancels) as total_cancels, SUM("Unsettled Revenue") as total_revenue FROM monthly_data WHERE Month IN ("November-2024", "December-2024", "January-2025", "February-2025", "March-2025", "April-2025", "May-2025", "June-2025", "July-2025", "August-2025") GROUP BY Route, Service ORDER BY total_revenue DESC', months=["November 2024", "December 2024", "January 2025", "February 2025", "March 2025", "April 2025", "May 2025", "June 2025", "July 2025", "August 2025"])
-- "planned vs actual trips for route E100 in August 2025" → execute_sql_query(sql_query='SELECT Month, Route, "Plan Rev Trips", "Operated Rev Trips", Cancels, Curtails, "Addition Trips" FROM monthly_data WHERE Route="E100" AND Month="August-2025"', months=["August 2025"])
+ROUTE-LEVEL queries (use monthly_data - Month format is "November 2024" with space):
+- "summarise operational performance for all bus routes from Nov 2024 to Aug 2025" → execute_sql_query(sql_query='SELECT Route, Service, AVG("OTP%") as avg_otp, AVG("Load Factor") as avg_load_factor, SUM("Operated Rev Trips") as total_trips, SUM(Cancels) as total_cancels, SUM("Unsettled Revenue") as total_revenue FROM monthly_data WHERE Month IN ("November 2024", "December 2024", "January 2025", "February 2025", "March 2025", "April 2025", "May 2025", "June 2025", "July 2025", "August 2025") GROUP BY Route, Service ORDER BY total_revenue DESC', months=["November 2024", "December 2024", "January 2025", "February 2025", "March 2025", "April 2025", "May 2025", "June 2025", "July 2025", "August 2025"])
+- "planned vs actual trips for route E100 in August 2025" → execute_sql_query(sql_query='SELECT Month, Route, "Plan Rev Trips", "Operated Rev Trips", Cancels, Curtails, "Addition Trips" FROM monthly_data WHERE Route="E100" AND Month="August 2025"', months=["August 2025"])
 - "least efficient route in August 2025" → get_top_routes_by_kpi(kpi="CRR", months=["August 2025"], ascending=true, limit=1)
 - "top 5 routes by OTP in July and August 2025" → get_top_routes_by_kpi(kpi="OTP%", months=["July 2025", "August 2025"], limit=5)
 
-SERVICE-LEVEL queries (use totals_summary - note space in month format "November 2024"):
+SERVICE-LEVEL queries (use totals_summary - Month format is "November 2024" with space):
 - "percentage change in urban unsettled revenue between September 2024 and December 2024" → execute_sql_query(sql_query='SELECT Service, ((MAX(CASE WHEN Month="December 2024" THEN "Unsettled Revenue" END) - MAX(CASE WHEN Month="September 2024" THEN "Unsettled Revenue" END)) / MAX(CASE WHEN Month="September 2024" THEN "Unsettled Revenue" END) * 100) as pct_change FROM totals_summary WHERE Service="Urban" GROUP BY Service', months=["September 2024", "December 2024"])
 - "compare urban revenue September 2024 vs July 2025" → execute_sql_query(sql_query='SELECT Month, Service, "Unsettled Revenue" FROM totals_summary WHERE Month IN ("September 2024", "July 2025") AND Service="Urban"', months=["September 2024", "July 2025"])
 - "total revenue for July and August by service" → execute_sql_query(sql_query='SELECT Service, SUM("Unsettled Revenue") as total FROM totals_summary WHERE Month IN ("July 2025", "August 2025") GROUP BY Service', months=["July 2025", "August 2025"])
@@ -182,11 +182,25 @@ GTFS FREQUENCY/SCHEDULE Examples (use SQL for service frequency, headway, waitin
 
 CRITICAL: When users refer to routes by display names (E100, 28, etc.), you MUST join with routes table and match on route_short_name, NOT route_id! route_id is an internal ID (e.g., "3051"), while route_short_name is the user-facing name (e.g., "E100").
 
+CHART/GRAPH/VISUALIZATION Examples (ALWAYS use plot_ functions - NEVER get_ functions):
+- "show me a bar chart of revenue" → plot_monthly_kpi_trends(metric="Unsettled Revenue")
+- "graph OTP performance" → plot_monthly_kpi_trends(metric="OTP%")
+- "visualize ridership trends" → plot_monthly_kpi_trends(metric="Checkins")
+- "draw a chart of load factor" → plot_monthly_kpi_trends(metric="Load Factor")
+- "plot revenue by service" → plot_monthly_kpi_trends(metric="Unsettled Revenue")
+- "chart showing OTP trends" → plot_monthly_kpi_trends(metric="OTP%")
+- "create a line graph of CRR" → plot_monthly_kpi_trends(metric="CRR")
+IMPORTANT: When user says "chart", "graph", "plot", "visualize" (not for routes), "draw a chart" → MUST use plot_ functions!
+
 MAP QUERY Examples (use map functions - NEVER use SQL for maps):
 - "show route E100 on map" → generate_route_map(route_ids=["E100"])
 - "draw route 28" → generate_route_map(route_ids=["28"])
 - "map routes E100 and 28" → generate_route_map(route_ids=["E100", "28"])
 - "visualize route E315" → generate_route_map(route_ids=["E315"])
+- "plot stops for route F23" → generate_stops_map(route_ids=["F23"])
+- "show stops on route E100" → generate_stops_map(route_ids=["E100"])
+- "map stops for route 28" → generate_stops_map(route_ids=["28"])
+- "display stops in zone 5" → generate_stops_map(zone_ids=[5])
 - "display all routes on map" → generate_route_map(max_routes=10)
 - "show route coverage" → analyze_route_coverage()
 - "map all metro lines" → generate_route_map(max_routes=10)
@@ -204,17 +218,22 @@ CRITICAL - SQL Query Best Practices:
 3. For "consistently" or "throughout period" queries: COUNT(DISTINCT Month) per item, then filter by expected total
 
 CRITICAL FUNCTION SELECTION RULES:
-1. For PLOTTING/VISUALIZATION queries:
-   - MONTHLY data (multiple months) → use plot_monthly_kpi_trends
-   - DAILY data (day-by-day within a month) → use plot_daily_kpi_trends
+1. For PLOTTING/VISUALIZATION/CHART queries - ALWAYS use plot_ functions:
+   - Keywords: "plot", "chart", "graph", "visualize", "show trends", "bar chart", "line chart", "draw a graph"
+   - MONTHLY trends → use plot_monthly_kpi_trends
+   - DAILY data (day-by-day) → use plot_daily_kpi_trends
    - Month comparisons → use plot_month_comparison
    - Quarter comparisons → use plot_quarterly_comparison
-   - CRITICAL: If user says "daily", "day by day", "each day" → MUST use plot_daily_kpi_trends!
-2. For MAP/ROUTE GEOGRAPHY queries (map, draw, show route, where does route go, route path, visualize route, I want to see route) → ALWAYS use generate_route_map or analyze_route_coverage
-3. For DATA QUERIES (percentage change, total, sum, compare data, list data) → use execute_sql_query
-4. For SPECIFIC COLUMN QUERIES (planned vs actual, specific metrics) → use execute_sql_query with SELECT for only needed columns
-5. For GTFS INFO QUERIES (route name ONLY, stop name ONLY, route details WITHOUT visualization) → use execute_sql_query with routes/stops tables
-6. NEVER use execute_sql_query for plotting or mapping - it returns data tables, not visualizations!
+   - If user says "daily", "day by day" → MUST use plot_daily_kpi_trends
+   - NEVER return dataframe when user explicitly asks for chart/graph/plot!
+2. For MAP/ROUTE GEOGRAPHY queries:
+   - Keywords: "map", "show route on map", "draw route", "route path", "where does route go"
+   - Routes on map → use generate_route_map
+   - Stops on map → use generate_stops_map or analyze_route_coverage
+3. For DATA/TABLE QUERIES (no visualization):
+   - Keywords: "list", "show data", "what is", "get", "find", percentage calculations
+   - Use execute_sql_query or specific get_ functions
+4. NEVER use get_revenue_analysis, get_ridership_trends, etc. when user asks for "chart" or "graph" - use plot_ functions instead!
 
 IMPORTANT DISTINCTIONS:
 - "show route E100" or "where does E100 go" = MAP (use generate_route_map)

@@ -266,13 +266,36 @@ Format your response as a JSON object:
         # Default fallback - provide helpful message instead of random table
         if not steps:
             # Return a text message instead of route statistics table
+            helpful_examples = """I wasn't able to understand that query. Here are some things I can help with:
+
+Performance Analysis (TTSS Data):
+- "Show OTP% for route E100 in July 2025"
+- "Compare Urban vs Intercity revenue"
+- "Top 10 routes by ridership"
+
+Maps & Routes (GTFS Data):
+- "Show route 28 on the map"
+- "Display stops in zone 5"
+- "List all stops on route E100"
+
+Schedule & Frequency (GTFS Data):
+- "What is the average waiting time for route X25?"
+- "How often does route 28 run?"
+- "Which routes have the shortest headway?"
+
+Trends & Comparisons:
+- "Plot OTP trends from January to August 2025"
+- "Compare Q1 vs Q2 2025 performance"
+
+Please try rephrasing your question or use one of the examples above."""
+
             return {
                 "query": query,
                 "interpretation": f"Unable to determine the right analysis for this query{' (LLM unavailable: ' + error + ')' if error else ''}",
                 "steps": [{
                     "description": "Query not understood",
                     "function": "text_response",
-                    "parameters": {"message": "I couldn't understand your query. Please try asking about:\n- OTP%, Load Factor, CRR, or revenue analysis\n- Route maps or stop locations\n- Ridership trends or service performance\n- Specific routes (e.g., 'show route E100 on map')"},
+                    "parameters": {"message": helpful_examples},
                     "output_type": "text",
                     "completed": True,
                 }],
@@ -393,7 +416,7 @@ Format your response as a JSON object:
             },
             {
                 "name": "generate_stops_map",
-                "description": "Plot stops on an interactive map, optionally filtered by zone(s). Use this for queries asking to show/map/plot stops, or to visualize zones geographically. CRITICAL: Use this for 'show stops in zone X', 'map zone 5', 'plot all stops in zone 2', etc.",
+                "description": "Plot stops on an interactive map, filtered by zone(s) OR route(s). USE THIS for: 'plot stops for route X', 'show stops on route F23', 'map stops for route 28', 'show stops in zone 5'. ALWAYS use this when user wants stops shown ON A MAP.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -402,9 +425,14 @@ Format your response as a JSON object:
                             "items": {"type": "integer"},
                             "description": "Optional list of zone IDs to filter (e.g., [5], [2, 3]). If provided, shows only stops in these zones.",
                         },
+                        "route_ids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional list of route short names to filter (e.g., ['F23'], ['E100', '28']). If provided, shows only stops on these routes.",
+                        },
                         "max_stops": {
                             "type": "integer",
-                            "description": "Maximum number of stops to display when zone_ids not specified (default: 100)",
+                            "description": "Maximum number of stops to display when zone_ids/route_ids not specified (default: 100)",
                         }
                     },
                     "required": [],
@@ -501,7 +529,7 @@ Format your response as a JSON object:
             },
             {
                 "name": "get_ridership_trends",
-                "description": "Analyze ridership trends over time (checkins/checkouts) from TTSS data across multiple months. Shows monthly progression of passenger volume.",
+                "description": "Get ridership DATA as a table (NOT a chart). Use plot_monthly_kpi_trends with metric='Checkins' for charts. Shows checkins/checkouts volume.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -527,7 +555,7 @@ Format your response as a JSON object:
             },
             {
                 "name": "get_revenue_analysis",
-                "description": "Analyze revenue performance by route from TTSS data. Shows total revenue, revenue per km, average fare. ALWAYS use month parameter for specific month queries.",
+                "description": "Get revenue DATA as a table (NOT a chart). Use plot_monthly_kpi_trends for charts. Shows total revenue, revenue per km, average fare.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -664,7 +692,7 @@ Format your response as a JSON object:
             },
             {
                 "name": "plot_monthly_kpi_trends",
-                "description": "Plot MONTHLY KPI trends as interactive line charts. Use this for monthly aggregated data over multiple months. ALWAYS use months parameter for date range queries.",
+                "description": "CREATE CHART/GRAPH for monthly KPI trends. USE THIS when user asks for: 'chart', 'graph', 'plot', 'visualize trends', 'bar chart', 'line chart'. Available metrics: OTP%, Load Factor, CRR, Checkins, Revenue. ALWAYS use this for visualization requests, never get_* functions.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -885,7 +913,7 @@ Available Tables:
   * NO Route column - this is aggregated by Service only!
 - monthly_data/route_data: ROUTE-LEVEL data - use for individual routes or "all routes" queries
   * Columns: Month, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', etc.
-  * Month format: "July-2025" (hyphen between month and year)
+  * Month format: "July 2025" (space between month and year)
   * HAS Route column - use this when user wants route-level information!
 - daily_summary: Service-level DAILY aggregates (Date, Day, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.)
   * Date format: datetime (e.g., '2025-08-15')
@@ -901,10 +929,10 @@ Available Tables:
 - transfers: GTFS transfer rules (from_stop_id, to_stop_id, transfer_type, min_transfer_time)
 - agency: GTFS agency info (agency_id, agency_name, agency_url, agency_timezone)
 
-CRITICAL: Month format differs between tables!
-- totals_summary uses: "July 2025" (WITH SPACE)
-- monthly_data uses: "July-2025" (WITH HYPHEN)
-- daily_summary/daily_data use: Date column (datetime)
+CRITICAL: Month format is consistent - ALWAYS use space format "July 2025":
+- totals_summary: Month = "July 2025" (space format)
+- monthly_data: Month = "July 2025" (space format)
+- daily_summary/daily_data: Use Date column (datetime, not Month)
 
 Note: Column names with spaces must be quoted with double quotes in SQL (e.g., "Unsettled Revenue", "OTP%", "Plan Rev Trips")
 
@@ -917,9 +945,9 @@ SINGLE TABLE Queries:
 - Daily data: SELECT Date, Day, SUM("Unsettled Revenue") as revenue FROM daily_summary WHERE strftime('%Y-%m', Date) = '2025-08' GROUP BY Date ORDER BY revenue DESC LIMIT 1
 
 HYBRID (GTFS + TTSS) Queries - REQUIRES JOINS:
-- Revenue by zone (MUST JOIN stops): SELECT s.zone_id, COUNT(DISTINCT m.Route) as routes, SUM(m."Unsettled Revenue") as revenue FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN stop_times st ON t.trip_id = st.trip_id JOIN stops s ON st.stop_id = s.stop_id WHERE m.Month='July-2025' GROUP BY s.zone_id ORDER BY revenue DESC
-- Performance by route type (MUST JOIN routes): SELECT CASE WHEN r.route_type=1 THEN 'Metro' WHEN r.route_type=3 THEN 'Bus' ELSE 'Other' END as type, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name WHERE m.Month='August-2025' GROUP BY type
-- Weekday vs weekend (MUST JOIN calendar): SELECT CASE WHEN c.saturday=1 OR c.sunday=1 THEN 'Weekend' ELSE 'Weekday' END as pattern, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN calendar c ON t.service_id = c.service_id WHERE m.Month='August-2025' GROUP BY pattern
+- Revenue by zone (MUST JOIN stops): SELECT s.zone_id, COUNT(DISTINCT m.Route) as routes, SUM(m."Unsettled Revenue") as revenue FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN stop_times st ON t.trip_id = st.trip_id JOIN stops s ON st.stop_id = s.stop_id WHERE m.Month='July 2025' GROUP BY s.zone_id ORDER BY revenue DESC
+- Performance by route type (MUST JOIN routes): SELECT CASE WHEN r.route_type=1 THEN 'Metro' WHEN r.route_type=3 THEN 'Bus' ELSE 'Other' END as type, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name WHERE m.Month='August 2025' GROUP BY type
+- Weekday vs weekend (MUST JOIN calendar): SELECT CASE WHEN c.saturday=1 OR c.sunday=1 THEN 'Weekend' ELSE 'Weekday' END as pattern, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN calendar c ON t.service_id = c.service_id WHERE m.Month='August 2025' GROUP BY pattern
 
 CRITICAL: zone_id is ONLY in stops table, route_type is ONLY in routes table, service schedules are ONLY in calendar table. You MUST JOIN these tables to access these columns!""",
                 "parameters": {
