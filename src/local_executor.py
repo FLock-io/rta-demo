@@ -14,6 +14,8 @@ class LocalExecutor:
         self.visualizer = Visualizer(data_loader)
         self.sql_executor = SQLQueryExecutor(data_loader)
         self.function_map = {
+            # Text response for fallback
+            "text_response": self.text_response,
             # GTFS functions
             "get_route_statistics": self.get_route_statistics,
             "get_stop_information": self.get_stop_information,
@@ -98,6 +100,10 @@ class LocalExecutor:
                     step["completed"] = False
 
         return results
+
+    def text_response(self, message: str) -> str:
+        """Return a text message for fallback responses."""
+        return message
 
     def get_route_statistics(self, route_type: str = None) -> pd.DataFrame:
         """Get basic statistics about routes."""

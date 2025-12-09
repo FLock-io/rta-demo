@@ -249,9 +249,10 @@ Format your response as a JSON object:
                 }
             )
 
+        # Only add route statistics if user explicitly asks for route list/table
         if any(
-            word in query_lower
-            for word in ["route", "statistic", "summary", "overview"]
+            phrase in query_lower
+            for phrase in ["list all routes", "show all routes", "route statistics", "routes table", "list routes"]
         ):
             steps.append(
                 {
@@ -262,16 +263,20 @@ Format your response as a JSON object:
                 }
             )
 
-        # Default fallback
+        # Default fallback - provide helpful message instead of random table
         if not steps:
-            steps.append(
-                {
-                    "description": "Get general route statistics",
-                    "function": "get_route_statistics",
-                    "parameters": {},
-                    "output_type": "dataframe",
-                }
-            )
+            # Return a text message instead of route statistics table
+            return {
+                "query": query,
+                "interpretation": f"Unable to determine the right analysis for this query{' (LLM unavailable: ' + error + ')' if error else ''}",
+                "steps": [{
+                    "description": "Query not understood",
+                    "function": "text_response",
+                    "parameters": {"message": "I couldn't understand your query. Please try asking about:\n- OTP%, Load Factor, CRR, or revenue analysis\n- Route maps or stop locations\n- Ridership trends or service performance\n- Specific routes (e.g., 'show route E100 on map')"},
+                    "output_type": "text",
+                    "completed": True,
+                }],
+            }
 
         return {
             "query": query,
@@ -285,7 +290,7 @@ Format your response as a JSON object:
         function_schemas = [
             {
                 "name": "get_route_statistics",
-                "description": "Get basic statistics about routes, optionally filtered by route type",
+                "description": "List GTFS routes with route_id, route_short_name, route_long_name, route_type. Use ONLY when user asks to 'list routes', 'show all routes', or 'what routes exist'. NOT for KPI/performance analysis - use TTSS functions instead.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -623,17 +628,17 @@ Format your response as a JSON object:
             },
             {
                 "name": "get_route_performance",
-                "description": "Get comprehensive performance metrics for a specific route from TTSS data. Returns all 33 KPI columns.",
+                "description": "Get COMPLETE performance profile for a specific route. Use for 'show all KPIs for route X', 'complete profile for route X', 'all metrics for route X', 'performance details for route X'. Returns all 33 KPI columns including OTP%, Load Factor, CRR, revenue, costs, trips, etc.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "route_id": {
                             "type": "string",
-                            "description": "Route ID to analyze (required)",
+                            "description": "Route ID to analyze (e.g., 'E100', '28', 'F01')",
                         },
                         "month": {
                             "type": "string",
-                            "description": "Optional month filter",
+                            "description": "Optional month filter (e.g., 'July 2025')",
                         },
                     },
                     "required": ["route_id"],
@@ -866,11 +871,22 @@ Format your response as a JSON object:
 
 Use this for: percentage changes, aggregations, data comparisons, calculating totals/sums.
 
+CRITICAL - Choosing the Right Table:
+- Use totals_summary for SERVICE-LEVEL analysis (comparing Urban vs Intercity vs Feeder as a whole)
+- Use monthly_data for ROUTE-LEVEL analysis (individual routes, "all routes", "bus routes performance", route lists)
+
+When user asks about "routes" or "all routes" or "bus routes" → USE monthly_data (has Route column)
+When user asks about "services" or "Urban vs Intercity" → USE totals_summary (aggregated by Service)
+
 Available Tables:
-- totals_summary/service_data: Service-level aggregates (Month, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.)
+- totals_summary/service_data: SERVICE-LEVEL aggregates - use for comparing Urban/Intercity/Feeder services as a whole
+  * Columns: Month, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.
   * Month format: "July 2025" (space between month and year)
-- monthly_data/route_data: Route-level data (Month, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', etc.)
+  * NO Route column - this is aggregated by Service only!
+- monthly_data/route_data: ROUTE-LEVEL data - use for individual routes or "all routes" queries
+  * Columns: Month, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', etc.
   * Month format: "July-2025" (hyphen between month and year)
+  * HAS Route column - use this when user wants route-level information!
 - daily_summary: Service-level DAILY aggregates (Date, Day, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.)
   * Date format: datetime (e.g., '2025-08-15')
 - daily_data: Route-level DAILY data (Date, Day, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', etc.)

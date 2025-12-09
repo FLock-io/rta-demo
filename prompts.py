@@ -81,12 +81,21 @@ PLOTTING Examples (use plot_ functions):
 - "daily revenue trends for August" → plot_daily_kpi_trends(month="August 2025", kpis=["Unsettled Revenue"])
 
 DATA QUERY Examples (use execute_sql_query or other functions):
-- "percentage change in urban unsettled revenue between September 2024 and December 2024" → execute_sql_query(sql_query='SELECT Service, ((MAX(CASE WHEN Month="December 2024" THEN "Unsettled Revenue" END) - MAX(CASE WHEN Month="September 2024" THEN "Unsettled Revenue" END)) / MAX(CASE WHEN Month="September 2024" THEN "Unsettled Revenue" END) * 100) as pct_change FROM totals_summary WHERE Service="Urban" GROUP BY Service', months=["September 2024", "December 2024"])
-- "compare urban revenue September 2024 vs July 2025" → execute_sql_query(sql_query='SELECT Month, Service, "Unsettled Revenue" FROM totals_summary WHERE Month IN ("September 2024", "July 2025") AND Service="Urban"', months=["September 2024", "July 2025"])
-- "total revenue for July and August" → execute_sql_query(sql_query='SELECT SUM("Unsettled Revenue") as total FROM totals_summary WHERE Month IN ("July 2025", "August 2025")', months=["July 2025", "August 2025"])
+
+CRITICAL - Route-level vs Service-level:
+- For "all routes" / "bus routes" / "route performance" → USE monthly_data (has Route column)
+- For "service comparison" / "Urban vs Intercity" → USE totals_summary (aggregated by Service)
+
+ROUTE-LEVEL queries (use monthly_data - note hyphenated month format "November-2024"):
+- "summarise operational performance for all bus routes from Nov 2024 to Aug 2025" → execute_sql_query(sql_query='SELECT Route, Service, AVG("OTP%") as avg_otp, AVG("Load Factor") as avg_load_factor, SUM("Operated Rev Trips") as total_trips, SUM(Cancels) as total_cancels, SUM("Unsettled Revenue") as total_revenue FROM monthly_data WHERE Month IN ("November-2024", "December-2024", "January-2025", "February-2025", "March-2025", "April-2025", "May-2025", "June-2025", "July-2025", "August-2025") GROUP BY Route, Service ORDER BY total_revenue DESC', months=["November 2024", "December 2024", "January 2025", "February 2025", "March 2025", "April 2025", "May 2025", "June 2025", "July 2025", "August 2025"])
 - "planned vs actual trips for route E100 in August 2025" → execute_sql_query(sql_query='SELECT Month, Route, "Plan Rev Trips", "Operated Rev Trips", Cancels, Curtails, "Addition Trips" FROM monthly_data WHERE Route="E100" AND Month="August-2025"', months=["August 2025"])
 - "least efficient route in August 2025" → get_top_routes_by_kpi(kpi="CRR", months=["August 2025"], ascending=true, limit=1)
 - "top 5 routes by OTP in July and August 2025" → get_top_routes_by_kpi(kpi="OTP%", months=["July 2025", "August 2025"], limit=5)
+
+SERVICE-LEVEL queries (use totals_summary - note space in month format "November 2024"):
+- "percentage change in urban unsettled revenue between September 2024 and December 2024" → execute_sql_query(sql_query='SELECT Service, ((MAX(CASE WHEN Month="December 2024" THEN "Unsettled Revenue" END) - MAX(CASE WHEN Month="September 2024" THEN "Unsettled Revenue" END)) / MAX(CASE WHEN Month="September 2024" THEN "Unsettled Revenue" END) * 100) as pct_change FROM totals_summary WHERE Service="Urban" GROUP BY Service', months=["September 2024", "December 2024"])
+- "compare urban revenue September 2024 vs July 2025" → execute_sql_query(sql_query='SELECT Month, Service, "Unsettled Revenue" FROM totals_summary WHERE Month IN ("September 2024", "July 2025") AND Service="Urban"', months=["September 2024", "July 2025"])
+- "total revenue for July and August by service" → execute_sql_query(sql_query='SELECT Service, SUM("Unsettled Revenue") as total FROM totals_summary WHERE Month IN ("July 2025", "August 2025") GROUP BY Service', months=["July 2025", "August 2025"])
 
 CRITICAL - Handling Ties (Multiple Results with Same Max/Min Value):
 When user asks for "highest", "lowest", "best", "worst" (singular), you MUST return ALL tied results, not just one.
@@ -210,7 +219,9 @@ IMPORTANT: When user asks for specific data (like "planned vs actual trips"), us
 
 Always specify the months parameter to load only necessary data.
 
-You can call multiple functions in sequence to build a complete analysis plan."""
+You can call multiple functions in sequence to build a complete analysis plan when genuinely needed (e.g., getting data AND plotting it, or combining GTFS and TTSS data).
+
+IMPORTANT: Do NOT call get_route_statistics unless the user explicitly asks to "list routes", "show all routes", or "route statistics table". It returns a generic GTFS routes table that is NOT useful as context for KPI analysis, maps, or performance queries."""
 
     # Following are individual prompts for various analysis tasks
     # --------not used now, but kept for future reference --------
