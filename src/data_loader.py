@@ -8,7 +8,13 @@ import re
 import requests
 import urllib3
 from datetime import datetime
-from requests_negotiate_sspi import HttpNegotiateAuth
+import sys
+
+# Windows-only: Import SSPI authentication for intranet access
+if sys.platform == 'win32':
+    from requests_negotiate_sspi import HttpNegotiateAuth
+else:
+    HttpNegotiateAuth = None
 
 # Disable SSL warnings for intranet
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -50,6 +56,11 @@ class DataLoader:
 
     def sync_intranet_data(self):
         """Download missing files from intranet for the period Nov 2022 - Oct 2025."""
+        # SSPI authentication only works on Windows
+        if sys.platform != 'win32':
+            self.logger.info("Intranet sync skipped (Windows SSPI auth not available on this platform). Using local files.")
+            return
+            
         base_url = "https://intranet.rta.ae/sites/rta/PTA/TTSS/Statistics/Released/For%20Planning/Route%20Summary%20PBD%20Dash/"
         req = requests.Session()
         req.auth = HttpNegotiateAuth()
