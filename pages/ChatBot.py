@@ -22,7 +22,7 @@ def main():
     # Initialize components
     if "data_loader" not in st.session_state:
         st.session_state.data_loader = DataLoader()
-        st.session_state.llm_planner = LLMPlanner()
+        st.session_state.llm_planner = LLMPlanner(st.session_state.data_loader)
         st.session_state.local_executor = LocalExecutor(st.session_state.data_loader)
         st.session_state.messages = []
 
@@ -192,6 +192,8 @@ def display_execution_plan(plan):
 
 def display_results(results, message_idx):
     """Display analysis results with unique keys based on message index"""
+    import hashlib
+    
     for result_idx, result in enumerate(results):
         if result["type"] == "dataframe":
             data = result["data"]
@@ -218,8 +220,12 @@ def display_results(results, message_idx):
                 st.dataframe(data, use_container_width=True)
 
         elif result["type"] == "chart":
-            # Generate unique key based on message index and result index
-            chart_key = f"chart_msg{message_idx}_result{result_idx}"
+            # Generate unique key based on message index, result index, and chart title/function
+            # Include function name and title hash for additional uniqueness
+            func_name = result.get("function", "chart")
+            title = result.get("title", "")
+            title_hash = hashlib.md5(f"{func_name}_{title}_{result_idx}".encode()).hexdigest()[:8]
+            chart_key = f"chart_msg{message_idx}_r{result_idx}_{title_hash}"
             st.plotly_chart(result["data"], use_container_width=True, key=chart_key)
 
         elif result["type"] == "metric":

@@ -6,7 +6,7 @@ Handles all chart and plot generation
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 from .data_loader import DataLoader
 
 
@@ -543,4 +543,127 @@ class Visualizer:
             barmode='group'
         )
         
+        return fig
+    def plot_data(self, data: Any, x: str, y: str, plot_type: str = 'bar', title: str = '', x_label: str = '', y_label: str = '', color: str = None):
+        """
+        Generic plotting function to visualize data.
+
+        Args:
+            data: List of dictionaries OR pandas DataFrame containing the data to plot
+            x: Column name for x-axis
+            y: Column name for y-axis (or list of column names for multi-series)
+            plot_type: Type of plot ('bar', 'line', 'scatter', 'pie')
+            title: Chart title
+            x_label: Label for x-axis
+            y_label: Label for y-axis
+            color: Column name to group by (creates separate lines/bars for each unique value)
+
+        Returns:
+            Plotly figure
+        """
+        if data is None:
+            return None
+            
+        if isinstance(data, pd.DataFrame):
+            df = data.copy()
+        else:
+            if not data:
+                fig = go.Figure()
+                fig.add_annotation(
+                    text="No data available to plot",
+                    xref="paper", yref="paper",
+                    x=0.5, y=0.5, showarrow=False,
+                    font=dict(size=16)
+                )
+                return fig
+            df = pd.DataFrame(data)
+        
+        if df.empty:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="No data available to plot",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=16)
+            )
+            return fig
+        
+        # Ensure x and y columns exist
+        if x not in df.columns:
+            return None
+            
+        # Handle multiple y columns (for multi-series plots)
+        y_cols = [y] if isinstance(y, str) else y
+        valid_y_cols = [col for col in y_cols if col in df.columns]
+        
+        if not valid_y_cols:
+            return None
+
+        # Sort by x if it looks like a date or month
+        if 'Month' in x or 'Date' in x:
+             df = self._sort_by_month(df) if 'Month' in x else df.sort_values(x)
+
+        fig = go.Figure()
+
+        # If color column is specified, create separate traces for each unique value
+        if color and color in df.columns:
+            unique_values = df[color].unique()
+            colors_palette = px.colors.qualitative.Plotly  # Use Plotly's default color palette
+            
+            for idx, val in enumerate(unique_values):
+                subset = df[df[color] == val]
+                # Sort subset by x
+                if 'Month' in x:
+                    subset = self._sort_by_month(subset)
+                elif 'Date' in x:
+                    subset = subset.sort_values(x)
+                
+                trace_color = colors_palette[idx % len(colors_palette)]
+                
+                for col in valid_y_cols:
+                    trace_name = f"{val}" if len(valid_y_cols) == 1 else f"{val} - {col}"
+                    
+                    if plot_type == 'bar':
+                        fig.add_trace(go.Bar(x=subset[x], y=subset[col], name=trace_name, marker_color=trace_color))
+                    elif plot_type == 'line':
+                        fig.add_trace(go.Scatter(x=subset[x], y=subset[col], mode='lines+markers', name=trace_name, line=dict(color=trace_color)))
+                    elif plot_type == 'scatter':
+                        fig.add_trace(go.Scatter(x=subset[x], y=subset[col], mode='markers', name=trace_name, marker=dict(color=trace_color)))
+        else:
+            # Original behavior - no color grouping
+            for col in valid_y_cols:
+                if plot_type == 'bar':
+                    fig.add_trace(go.Bar(x=df[x], y=df[col], name=col))
+                elif plot_type == 'line':
+                    fig.add_trace(go.Scatter(x=df[x], y=df[col], mode='lines+markers', name=col))
+                elif plot_type == 'scatter':
+                    fig.add_trace(go.Scatter(x=df[x], y=df[col], mode='markers', name=col))
+                elif plot_type == 'pie':
+                    # Pie chart usually takes one numeric column and one categorical
+                    fig = px.pie(df, values=col, names=x, title=title)
+                    break # Only one series for pie chart
+
+        # Update layout
+        if plot_type != 'pie':
+            fig.update_layout(
+                title=title,
+                xaxis_title=x_label if x_label else x,
+                yaxis_title=y_label if y_label else (valid_y_cols[0] if len(valid_y_cols) == 1 else "Value"),
+                hovermode='x unified',
+                template='plotly_white',
+                height=500,
+                barmode='group' if plot_type == 'bar' else 'relative',
+                legend=dict(
+                    orientation="v",
+                    yanchor="top",
+                    y=1,
+                    xanchor="left",
+                    x=1.02
+                )
+            )
+            
+            # Rotate x-axis labels if many items
+            if len(df) > 10:
+                fig.update_xaxes(tickangle=-45)
+
         return fig

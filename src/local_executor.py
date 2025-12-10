@@ -50,6 +50,7 @@ class LocalExecutor:
             "calculate_percentage_change": self.calculate_percentage_change,
             # SQL-based querying
             "execute_sql_query": self.execute_sql_query,
+            "plot_sql_query": self.plot_sql_query,
         }
 
     def execute_plan(self, plan: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1384,3 +1385,34 @@ class LocalExecutor:
             DataFrame with query results
         """
         return self.sql_executor.execute_query(sql_query, months=months)
+
+    def plot_sql_query(self, sql_query: str, x: str, y: str, plot_type: str = 'bar', title: str = '', x_label: str = '', y_label: str = '', color: str = None, months: List[str] = None) -> go.Figure:
+        """Execute SQL query and plot the results.
+        
+        Args:
+            sql_query: SQL query to execute
+            x: Column for x-axis
+            y: Column for y-axis
+            plot_type: Type of plot ('bar', 'line', 'scatter', 'pie')
+            title: Chart title
+            x_label: Label for x-axis
+            y_label: Label for y-axis
+            color: Column to group by (creates separate lines/bars for each unique value, e.g., 'Route')
+            months: Optional list of months to load data for
+        """
+        # Execute SQL query
+        df = self.execute_sql_query(sql_query, months=months)
+        
+        if isinstance(df, pd.DataFrame):
+            # Plot data with color grouping if specified
+            return self.visualizer.plot_data(df, x, y, plot_type, title, x_label, y_label, color=color)
+        else:
+            # Handle error or empty result
+            fig = go.Figure()
+            fig.add_annotation(
+                text="Error executing SQL query or no data returned",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=16)
+            )
+            return fig

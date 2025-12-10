@@ -8,10 +8,21 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 from prompts import RTAPrompts
+from .data_loader import DataLoader
+from .context_manager import ContextManager
 
 
 class LLMPlanner:
-    def __init__(self):
+    def __init__(self, data_loader: DataLoader = None):
+        # Initialize DataLoader if not provided
+        if data_loader:
+            self.data_loader = data_loader
+        else:
+            self.data_loader = DataLoader()
+            
+        # Initialize ContextManager
+        self.context_manager = ContextManager(self.data_loader)
+
         # Load API key from environment variable
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
@@ -33,28 +44,9 @@ class LLMPlanner:
             "generate_stops_map",
             "get_transfer_points",
             "analyze_network_connectivity",
-            # TTSS KPI functions
-            "get_otp_analysis",
-            "get_load_factor_analysis",
-            "get_crr_analysis",
-            "get_ridership_trends",
-            "get_revenue_analysis",
-            "get_cost_efficiency",
-            "get_service_summary",
-            "get_top_routes_by_kpi",
-            "get_route_performance",
-            "analyze_weekend_vs_weekday",
-            # Visualization functions
-            "plot_monthly_kpi_trends",
-            "plot_daily_kpi_trends",
-            "plot_month_comparison",
-            "plot_quarterly_comparison",
-            # Advanced querying functions
-            "query_multi_month_data",
-            "aggregate_monthly_data",
-            "calculate_percentage_change",
-            # SQL-based querying
+            # SQL-based querying and plotting
             "execute_sql_query",
+            "plot_sql_query",
         ]
 
     def generate_plan(self, user_query: str) -> Dict[str, Any]:
@@ -123,19 +115,30 @@ Format your response as a JSON object:
         function_schemas = self._get_function_schemas()
 
         try:
-            # Get system prompt from prompts.py
+            # Get dynamic context from ContextManager
+            context_string = self.context_manager.get_context_string(user_query)
+            system_context = self.context_manager.get_system_prompt_context()
+            
+            # Combine for the prompt
+            dynamic_context = f"{system_context}\n\nContext Analysis:\n{context_string}"
+
+            # Get system prompt from prompts.py with dynamic context
             system_prompt = RTAPrompts.get_system_planning_prompt(
-                self.available_functions
+                self.available_functions,
+                dynamic_context=dynamic_context
             )
 
+            # Convert function schemas to tools format for parallel tool calls
+            tools = [{"type": "function", "function": schema} for schema in function_schemas]
+            
             response = self.client.chat.completions.create(
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_query},
                 ],
-                functions=function_schemas,
-                function_call="auto",
+                tools=tools,
+                tool_choice="auto",
                 temperature=0.1,
             )
 
@@ -156,6 +159,16 @@ Format your response as a JSON object:
 
         steps = []
         query_lower = query.lower()
+        
+        # Extract entities using ContextManager for smarter fallback
+        entities = self.context_manager.extract_entities(query)
+        
+        # Helper to get specific month if mentioned, else None
+        specific_month = entities['months'][0] if entities['months'] else None
+        
+        # Helper to get specific route if mentioned
+        specific_route_id = entities['routes'][0]['id'] if entities['routes'] else None
+        specific_service = entities['services'][0] if entities['services'] else None
 
         # TTSS KPI queries
         if any(
@@ -165,7 +178,11 @@ Format your response as a JSON object:
                 {
                     "description": "Analyze On-Time Performance",
                     "function": "get_otp_analysis",
-                    "parameters": {},
+                    "parameters": {
+                        "month": specific_month,
+                        "route_id": specific_route_id,
+                        "service": specific_service
+                    },
                     "output_type": "dataframe",
                 }
             )
@@ -177,7 +194,11 @@ Format your response as a JSON object:
                 {
                     "description": "Analyze Load Factor",
                     "function": "get_load_factor_analysis",
-                    "parameters": {},
+                    "parameters": {
+                        "month": specific_month,
+                        "route_id": specific_route_id,
+                        "service": specific_service
+                    },
                     "output_type": "dataframe",
                 }
             )
@@ -190,7 +211,11 @@ Format your response as a JSON object:
                 {
                     "description": "Analyze Cost Recovery Ratio",
                     "function": "get_crr_analysis",
-                    "parameters": {},
+                    "parameters": {
+                        "month": specific_month,
+                        "route_id": specific_route_id,
+                        "service": specific_service
+                    },
                     "output_type": "dataframe",
                 }
             )
@@ -203,7 +228,10 @@ Format your response as a JSON object:
                 {
                     "description": "Analyze ridership trends",
                     "function": "get_ridership_trends",
-                    "parameters": {},
+                    "parameters": {
+                        "route_id": specific_route_id,
+                        "service": specific_service
+                    },
                     "output_type": "dataframe",
                 }
             )
@@ -213,7 +241,11 @@ Format your response as a JSON object:
                 {
                     "description": "Analyze revenue",
                     "function": "get_revenue_analysis",
-                    "parameters": {},
+                    "parameters": {
+                        "month": specific_month,
+                        "route_id": specific_route_id,
+                        "service": specific_service
+                    },
                     "output_type": "dataframe",
                 }
             )
@@ -223,7 +255,11 @@ Format your response as a JSON object:
                 {
                     "description": "Analyze cost efficiency",
                     "function": "get_cost_efficiency",
-                    "parameters": {},
+                    "parameters": {
+                        "month": specific_month,
+                        "route_id": specific_route_id,
+                        "service": specific_service
+                    },
                     "output_type": "dataframe",
                 }
             )
@@ -448,31 +484,137 @@ Please try rephrasing your question or use one of the examples above."""
                 "description": "Analyze overall network connectivity statistics",
                 "parameters": {"type": "object", "properties": {}, "required": []},
             },
-            # TTSS KPI Functions
+            # SQL-based querying and plotting
             {
-                "name": "get_otp_analysis",
-                "description": "Analyze On-Time Performance (OTP%) for routes from TTSS data. Shows percentage of on-time stops, late stops, early stops. ALWAYS use month parameter for specific month queries.",
+                "name": "execute_sql_query",
+                "description": """Execute SQL query on transit data for DATA ANALYSIS ONLY. 
+ 
+ Use this for: percentage changes, aggregations, data comparisons, calculating totals/sums.
+ 
+ CRITICAL - GTFS vs TTSS: Choose the RIGHT tables!
+ - GTFS tables (routes, trips, stop_times, stops): For SCHEDULE queries (wait time, frequency, headway, how often routes run)
+ - TTSS tables (monthly_data, totals_summary): For PERFORMANCE queries (OTP%, revenue, ridership, costs)
+ 
+ GTFS SCHEDULE QUERIES (wait time, frequency, headway):
+ - "How often does route X run?" → Use routes + trips tables, count trips
+ - "Average wait time for route X" → Use routes + trips, calculate 24*60/trip_count for headway in minutes
+ - "Routes with highest/lowest wait time" → ORDER BY headway DESC/ASC
+ 
+ Example GTFS Queries:
+ - Frequency/wait time: SELECT r.route_short_name, COUNT(DISTINCT t.trip_id) as trips, ROUND(24.0*60/COUNT(DISTINCT t.trip_id),1) as avg_headway_min FROM routes r JOIN trips t ON r.route_id=t.route_id WHERE r.route_short_name='E100' GROUP BY r.route_short_name
+ - Top 5 longest wait: SELECT r.route_short_name, COUNT(DISTINCT t.trip_id) as trips, ROUND(24.0*60/COUNT(DISTINCT t.trip_id),1) as headway FROM routes r JOIN trips t ON r.route_id=t.route_id GROUP BY r.route_short_name ORDER BY headway DESC LIMIT 5
+ - Stops on route: SELECT r.route_short_name, COUNT(DISTINCT st.stop_id) as stops FROM routes r JOIN trips t ON r.route_id=t.route_id JOIN stop_times st ON t.trip_id=st.trip_id WHERE r.route_short_name='F23' GROUP BY r.route_short_name
+ 
+ TTSS TABLE Selection:
+ - Use totals_summary for SERVICE-LEVEL analysis (comparing Urban vs Intercity vs Feeder as a whole)
+ - Use monthly_data for ROUTE-LEVEL analysis (individual routes, "all routes", "bus routes performance", route lists)
+ 
+ Available Tables:
+ - totals_summary/service_data: SERVICE-LEVEL aggregates - use for comparing Urban/Intercity/Feeder services as a whole
+   * Columns: Month, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.
+   * Month format: "July 2025" (space between month and year)
+   * NO Route column - this is aggregated by Service only!
+ - monthly_data/route_data: ROUTE-LEVEL data - use for individual routes or "all routes" queries
+   * Columns: Month, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', etc.
+   * Month format: "July 2025" (space between month and year)
+   * HAS Route column - use this when user wants route-level information!
+ - daily_summary: Service-level DAILY aggregates (Date, Day, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.)
+   * Date format: datetime (e.g., '2025-08-15')
+ - daily_data: Route-level DAILY data (Date, Day, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', etc.)
+   * Date format: datetime (e.g., '2025-08-15')
+ - routes: GTFS routes (route_id, route_short_name, route_long_name, route_type)
+ - stops: GTFS stops (stop_id, stop_name, stop_lat, stop_lon, zone_id)
+ - trips: GTFS trips (trip_id, route_id, service_id, trip_headsign, direction_id, shape_id)
+ - stop_times: GTFS stop times (trip_id, stop_id, arrival_time, departure_time, stop_sequence)
+ - calendar: GTFS service calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
+ - calendar_dates: GTFS calendar exceptions (service_id, date, exception_type)
+ - shapes: GTFS route shapes (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence)
+ - transfers: GTFS transfer rules (from_stop_id, to_stop_id, transfer_type, min_transfer_time)
+ - agency: GTFS agency info (agency_id, agency_name, agency_url, agency_timezone)
+ 
+ CRITICAL: Month format is consistent - ALWAYS use space format "July 2025":
+ - totals_summary: Month = "July 2025" (space format)
+ - monthly_data: Month = "July 2025" (space format)
+ - daily_summary/daily_data: Use Date column (datetime, not Month)
+ 
+ Note: Column names with spaces must be quoted with double quotes in SQL (e.g., "Unsettled Revenue", "OTP%", "Plan Rev Trips")
+ 
+ Example Queries:
+ 
+ SINGLE TABLE Queries:
+ - Percentage change: SELECT Service, ((MAX(CASE WHEN Month='December 2024' THEN "Unsettled Revenue" END) - MAX(CASE WHEN Month='September 2024' THEN "Unsettled Revenue" END)) / MAX(CASE WHEN Month='September 2024' THEN "Unsettled Revenue" END) * 100) as pct_change FROM totals_summary WHERE Service='Urban' GROUP BY Service
+ - Month comparison: SELECT Month, Service, "Unsettled Revenue" FROM totals_summary WHERE Month IN ('July 2025', 'August 2025')
+ - Aggregation: SELECT Service, SUM("Unsettled Revenue") as total FROM totals_summary WHERE Month IN ('July 2025', 'August 2025') GROUP BY Service
+ - Daily data: SELECT Date, Day, SUM("Unsettled Revenue") as revenue FROM daily_summary WHERE strftime('%Y-%m', Date) = '2025-08' GROUP BY Date ORDER BY revenue DESC LIMIT 1
+ 
+ HYBRID (GTFS + TTSS) Queries - REQUIRES JOINS:
+ - Revenue by zone (MUST JOIN stops): SELECT s.zone_id, COUNT(DISTINCT m.Route) as routes, SUM(m."Unsettled Revenue") as revenue FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN stop_times st ON t.trip_id = st.trip_id JOIN stops s ON st.stop_id = s.stop_id WHERE m.Month='July 2025' GROUP BY s.zone_id ORDER BY revenue DESC
+ - Performance by route type (MUST JOIN routes): SELECT CASE WHEN r.route_type=1 THEN 'Metro' WHEN r.route_type=3 THEN 'Bus' ELSE 'Other' END as type, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name WHERE m.Month='August 2025' GROUP BY type
+ - Weekday vs weekend (MUST JOIN calendar): SELECT CASE WHEN c.saturday=1 OR c.sunday=1 THEN 'Weekend' ELSE 'Weekday' END as pattern, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN calendar c ON t.service_id = c.service_id WHERE m.Month='August 2025' GROUP BY pattern
+ 
+ CRITICAL: zone_id is ONLY in stops table, route_type is ONLY in routes table, service schedules are ONLY in calendar table. You MUST JOIN these tables to access these columns!""",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "route_id": {
+                        "sql_query": {
                             "type": "string",
-                            "description": "Specific route ID to analyze (e.g., '10', 'E100')",
+                            "description": "SQL query to execute. Use double quotes for column names with spaces.",
                         },
-                        "service": {
-                            "type": "string",
-                            "description": "Service type: 'Urban', 'Intercity', 'Feeder', or 'Seasonal'",
-                        },
-                        "month": {
-                            "type": "string",
-                            "description": "Specific month to filter by (e.g., 'June 2025', 'July 2025', 'December 2024'). Use this for month-specific queries.",
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of results (default: 20)",
+                        "months": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional list of months to load data for (improves performance). Example: ['September 2024', 'December 2024']",
                         },
                     },
-                    "required": [],
+                    "required": ["sql_query"],
+                },
+            },
+            {
+                "name": "plot_sql_query",
+                "description": "Execute a SQL query and visualize the results as a chart. Use this for ALL plotting requests (charts, graphs, trends). CRITICAL: When plotting multiple routes/services on the SAME chart, use the 'color' parameter to create separate lines/bars for each.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "sql_query": {
+                            "type": "string",
+                            "description": "SQL query to get the data to plot. Must select columns for x, y, and optionally color axes.",
+                        },
+                        "x": {
+                            "type": "string",
+                            "description": "Column name for x-axis (e.g., 'Month', 'Date')",
+                        },
+                        "y": {
+                            "type": "string",
+                            "description": "Column name for y-axis (e.g., 'Revenue', 'OTP%'). Can be a single column or list of columns.",
+                        },
+                        "plot_type": {
+                            "type": "string",
+                            "description": "Type of plot: 'bar', 'line', 'scatter', 'pie'",
+                            "enum": ["bar", "line", "scatter", "pie"],
+                        },
+                        "color": {
+                            "type": "string",
+                            "description": "Column to group by - creates separate lines/bars for each unique value. Use 'Route' for multiple routes, 'Service' for multiple services. CRITICAL: Use this when user asks to plot multiple routes/services on the same chart!",
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "Title of the chart",
+                        },
+                        "x_label": {
+                            "type": "string",
+                            "description": "Label for x-axis",
+                        },
+                        "y_label": {
+                            "type": "string",
+                            "description": "Label for y-axis",
+                        },
+                        "months": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Optional list of months to load data for (improves performance).",
+                        },
+                    },
+                    "required": ["sql_query", "x", "y", "plot_type"],
                 },
             },
             {
@@ -1025,7 +1167,7 @@ CRITICAL: zone_id is ONLY in stops table, route_type is ONLY in routes table, se
     def _determine_output_type(self, function_name: str) -> str:
         """Determine the output type based on function name."""
 
-        chart_functions = ["analyze_route_coverage", "generate_route_map", "generate_stops_map", "plot_monthly_kpi_trends", "plot_daily_kpi_trends", "plot_month_comparison", "plot_quarterly_comparison"]
+        chart_functions = ["analyze_route_coverage", "generate_route_map", "generate_stops_map", "plot_sql_query"]
         dataframe_functions = [
             # GTFS functions
             "get_route_statistics",
@@ -1036,21 +1178,6 @@ CRITICAL: zone_id is ONLY in stops table, route_type is ONLY in routes table, se
             "analyze_service_frequency",
             "get_transfer_points",
             "analyze_network_connectivity",
-            # TTSS functions
-            "get_otp_analysis",
-            "get_load_factor_analysis",
-            "get_crr_analysis",
-            "get_ridership_trends",
-            "get_revenue_analysis",
-            "get_cost_efficiency",
-            "get_service_summary",
-            "get_top_routes_by_kpi",
-            "get_route_performance",
-            "analyze_weekend_vs_weekday",
-            # Advanced querying functions
-            "query_multi_month_data",
-            "aggregate_monthly_data",
-            "calculate_percentage_change",
             # SQL-based querying
             "execute_sql_query",
         ]
