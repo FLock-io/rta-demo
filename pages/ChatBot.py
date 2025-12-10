@@ -7,6 +7,10 @@ import streamlit as st
 import sys
 from pathlib import Path
 import pandas as pd
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
