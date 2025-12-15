@@ -10,11 +10,22 @@ class ContextManager:
     Identifies entities (routes, stops, dates) in user queries without sending data to LLM.
     """
     
+    # Month name to number mapping
+    MONTH_MAP = {
+        'january': 1, 'february': 2, 'march': 3, 'april': 4,
+        'may': 5, 'june': 6, 'july': 7, 'august': 8,
+        'september': 9, 'october': 10, 'november': 11, 'december': 12
+    }
+    
+    # Reverse mapping
+    MONTH_NAMES = {v: k.capitalize() for k, v in MONTH_MAP.items()}
+    
     def __init__(self, data_loader: DataLoader):
         self.data_loader = data_loader
         self.routes_cache = None
         self.stops_cache = None
         self.months_cache = None
+        self.months_parsed = []  # List of (month_name, year) tuples for filtering
         
         # Initialize caches
         self._refresh_cache()
@@ -44,6 +55,18 @@ class ContextManager:
             
         # Cache Available Months
         self.months_cache = self.data_loader.get_available_months()
+        
+        # Parse months into (month_name, year) tuples for easier filtering
+        self.months_parsed = []
+        for month_str in self.months_cache:
+            parts = month_str.split()
+            if len(parts) >= 2:
+                try:
+                    month_name = parts[0]
+                    year = int(parts[1])
+                    self.months_parsed.append((month_name, year, month_str))
+                except ValueError:
+                    pass
         
     def extract_entities(self, query: str) -> Dict[str, Any]:
         """
@@ -145,12 +168,74 @@ class ContextManager:
         """
         Get general metadata for the system prompt (valid ranges, etc).
         """
+        # Get current date for temporal reference
+        today = datetime.now()
+        current_date_str = today.strftime("%B %d, %Y")  # e.g., "December 15, 2025"
+        current_month_str = today.strftime("%B %Y")  # e.g., "December 2025"
+        current_year = today.year
+        current_month = today.month
+        
+        # Calculate temporal references for LLM
+        # Get all months in current year that have data
+        current_year_months = [m for m in self.months_cache if str(current_year) in m]
+        
+        # Get all months from last year that have data
+        last_year = current_year - 1
+        last_year_months = [m for m in self.months_cache if str(last_year) in m]
+        
+        # Get last month
+        last_month_num = current_month - 1 if current_month > 1 else 12
+        last_month_year = current_year if current_month > 1 else last_year
+        last_month_name = self.MONTH_NAMES.get(last_month_num, "Unknown")
+        last_month_str = f"{last_month_name} {last_month_year}"
+        
+        # Calculate current quarter
+        current_quarter = (current_month - 1) // 3 + 1
+        quarter_months_map = {
+            1: ['January', 'February', 'March'],
+            2: ['April', 'May', 'June'],
+            3: ['July', 'August', 'September'],
+            4: ['October', 'November', 'December']
+        }
+        current_quarter_months = [f"{m} {current_year}" for m in quarter_months_map[current_quarter]]
+        
+        # Previous quarter
+        prev_quarter = current_quarter - 1 if current_quarter > 1 else 4
+        prev_quarter_year = current_year if current_quarter > 1 else last_year
+        prev_quarter_months = [f"{m} {prev_quarter_year}" for m in quarter_months_map[prev_quarter]]
+        
         if not self.months_cache:
-            return "Data availability: Unknown."
-            
-        return f"""
+            return f"""
+Current Date: {current_date_str}
+Data availability: Unknown.
+"""
+        
+        # Build context with temporal awareness
+        context = f"""
+Current Date Reference:
+- Today's Date: {current_date_str}
+- Current Month: {current_month_str}
+- Current Year: {current_year}
+- Last Month: {last_month_str}
+
+IMPORTANT - Interpreting Temporal References:
+- "this year" = {current_year} → includes months: {', '.join(current_year_months) if current_year_months else 'No data available'}
+- "last year" = {last_year} → includes months: {', '.join(last_year_months) if last_year_months else 'No data available'}
+- "this month" = {current_month_str} (check if data available)
+- "last month" = {last_month_str} (check if data available)
+- "this quarter" = Q{current_quarter} {current_year} → includes months: {', '.join(current_quarter_months)}
+- "last quarter" = Q{prev_quarter} {prev_quarter_year} → includes months: {', '.join(prev_quarter_months)}
+- "Q1 {current_year}" = January {current_year}, February {current_year}, March {current_year}
+- "Q2 {current_year}" = April {current_year}, May {current_year}, June {current_year}
+- "Q3 {current_year}" = July {current_year}, August {current_year}, September {current_year}
+- "Q4 {current_year}" = October {current_year}, November {current_year}, December {current_year}
+
 Data Availability:
 - Date Range: {self.months_cache[0]} to {self.months_cache[-1]}
 - Total Months: {len(self.months_cache)}
+- Available Months: {', '.join(self.months_cache)}
 - Service Types: Urban, Intercity, Feeder, Seasonal
+
+CRITICAL: When user asks about "this year", "last year", "this month", etc., use the dates above to determine the correct months filter. Do NOT hardcode dates.
 """
+        return context
