@@ -8,7 +8,10 @@ import re
 import requests
 import urllib3
 from datetime import datetime
-from requests_negotiate_sspi import HttpNegotiateAuth
+try:
+    from requests_negotiate_sspi import HttpNegotiateAuth
+except ImportError:
+    HttpNegotiateAuth = None
 
 # Disable SSL warnings for intranet
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -52,7 +55,8 @@ class DataLoader:
         """Download missing files from intranet for the period Nov 2022 - Oct 2025."""
         base_url = "https://intranet.rta.ae/sites/rta/PTA/TTSS/Statistics/Released/For%20Planning/Route%20Summary%20PBD%20Dash/"
         req = requests.Session()
-        req.auth = HttpNegotiateAuth()
+        if HttpNegotiateAuth:
+            req.auth = HttpNegotiateAuth()
         # Ensure directory exists
         self.route_summary_folder.mkdir(parents=True, exist_ok=True)
         
