@@ -507,21 +507,35 @@ Please try rephrasing your question or use one of the examples above."""
  
  TTSS TABLE Selection:
  - Use totals_summary for SERVICE-LEVEL analysis (comparing Urban vs Intercity vs Feeder as a whole)
- - Use monthly_data for ROUTE-LEVEL analysis (individual routes, "all routes", "bus routes performance", route lists)
+ - Use monthly_data for ROUTE-LEVEL MONTHLY analysis (individual routes, "all routes", "bus routes performance", route lists)
+ - Use daily_data for ROUTE-LEVEL DAILY/DATE-SPECIFIC analysis (specific date queries, "on 15-Jun-2025", "on 20-Jan-2026")
+ - Use daily_summary for SERVICE-LEVEL DAILY analysis (service-level aggregates by date)
+ 
+ CRITICAL - SPECIFIC DATE QUERIES:
+ When user asks about a SPECIFIC DATE (e.g., "on 16th December 2025", "on 20-Jan-2026", "on 15-Jun-2025"):
+ - ALWAYS use daily_data (route-level) or daily_summary (service-level) tables
+ - NEVER use monthly_data or totals_summary for date-specific queries!
+ - Date column is datetime. ALWAYS filter using: date(Date) = '2025-12-16' (NOT Date = '2025-12-16')
+ - The months parameter MUST contain the month of the date (e.g., for 16-Dec-2025, use months=["December 2025"])
  
  Available Tables:
  - totals_summary/service_data: SERVICE-LEVEL aggregates - use for comparing Urban/Intercity/Feeder services as a whole
    * Columns: Month, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.
    * Month format: "July 2025" (space between month and year)
    * NO Route column - this is aggregated by Service only!
- - monthly_data/route_data: ROUTE-LEVEL data - use for individual routes or "all routes" queries
-   * Columns: Month, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', etc.
+ - monthly_data/route_data: ROUTE-LEVEL MONTHLY data - use for individual routes or "all routes" queries at MONTHLY granularity
+   * Columns: Month, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', 'Cancels', 'Curtails', 'Off Route', 'Late Stops', 'Early Stops', 'Total Stops', 'OnTime Stops', 'Driven Rev Km', 'Driven Dead Km', 'Driven Total Km', 'Driven Dead %', 'Passenger Km', 'Seat Km', 'Checkins / Rev Km', 'Avg Fare', '1stStop1stTrip OTP%', 'Rev / Rev Km', 'Avg Daily Cost', 'Cost / Rev Km', 'Subsidy / Rev Km', 'Operated Days', etc.
    * Month format: "July 2025" (space between month and year)
    * HAS Route column - use this when user wants route-level information!
- - daily_summary: Service-level DAILY aggregates (Date, Day, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.)
+ - daily_summary: Service-level DAILY aggregates
+   * Columns: Date, Day, Service, Checkins, Checkouts, 'Unsettled Revenue', 'Driven Rev Km', 'Driven Dead Km', 'Driven Total Km', 'Driven Dead %', 'Passenger Km', 'Seat Km', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', 'Cancels', 'Curtails', 'Addition Trips', 'Off Route', 'Checkins / Rev Km', 'Avg Fare', 'Total Stops', 'OnTime Stops', 'Early Stops', 'Late Stops', 'OTP%', '1stStop1stTrip OTP%', 'Rev / Rev Km', 'Avg Daily Cost', 'Cost / Rev Km', 'CRR', 'Subsidy / Rev Km'
    * Date format: datetime (e.g., '2025-08-15')
- - daily_data: Route-level DAILY data (Date, Day, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', etc.)
+   * NO Route column - aggregated by Service only!
+ - daily_data: Route-level DAILY data - USE THIS for date-specific route queries!
+   * Columns: Date, Day, Route, Service, Checkins, Checkouts, 'Unsettled Revenue', 'Driven Rev Km', 'Driven Dead Km', 'Driven Total Km', 'Driven Dead %', 'Passenger Km', 'Seat Km', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', 'Cancels', 'Curtails', 'Addition Trips', 'Off Route', 'Checkins / Rev Km', 'Avg Fare', 'Total Stops', 'OnTime Stops', 'Early Stops', 'Late Stops', 'OTP%', '1stStop1stTrip OTP%', 'Rev / Rev Km', 'Avg Daily Cost', 'Cost / Rev Km', 'CRR', 'Subsidy / Rev Km', 'Length of Ride', 'Avg Seats', 'Max Duties', 'Max PVR'
    * Date format: datetime (e.g., '2025-08-15')
+   * HAS Route column - use this for date+route queries!
+   * HAS 'Avg Seats', 'Max PVR', 'Max Duties', 'Length of Ride' columns (NOT in monthly_data!)
  - routes: GTFS routes (route_id, route_short_name, route_long_name, route_type)
  - stops: GTFS stops (stop_id, stop_name, stop_lat, stop_lon, zone_id)
  - trips: GTFS trips (trip_id, route_id, service_id, trip_headsign, direction_id, shape_id)
@@ -537,7 +551,14 @@ Please try rephrasing your question or use one of the examples above."""
  - monthly_data: Month = "July 2025" (space format)
  - daily_summary/daily_data: Use Date column (datetime, not Month)
  
- Note: Column names with spaces must be quoted with double quotes in SQL (e.g., "Unsettled Revenue", "OTP%", "Plan Rev Trips")
+ CRITICAL - COLUMN NAME GOTCHAS:
+ - "Max PVR" is a COLUMN NAME (not SQL MAX function). Always quote it: "Max PVR". NEVER write MAX(PVR) - the column is literally named "Max PVR".
+ - "Avg Seats" is a COLUMN NAME. Always quote it: "Avg Seats". NEVER write AVG(Seats).
+ - "Avg Fare" is a COLUMN NAME. Always quote it: "Avg Fare". NEVER write AVG(Fare).
+ - "Avg Daily Cost" is a COLUMN NAME. Always quote it: "Avg Daily Cost". NEVER write AVG("Daily Cost").
+ - "Driven Total Km" is the total km (revenue + dead). Always quote it: "Driven Total Km".
+ - "Off Route" is a COLUMN NAME for off-route occurrences. Always quote it: "Off Route".
+ - Column names with spaces must be quoted with double quotes in SQL (e.g., "Unsettled Revenue", "OTP%", "Plan Rev Trips")
  
  Example Queries:
  
@@ -547,10 +568,21 @@ Please try rephrasing your question or use one of the examples above."""
  - Aggregation: SELECT Service, SUM("Unsettled Revenue") as total FROM totals_summary WHERE Month IN ('July 2025', 'August 2025') GROUP BY Service
  - Daily data: SELECT Date, Day, SUM("Unsettled Revenue") as revenue FROM daily_summary WHERE strftime('%Y-%m', Date) = '2025-08' GROUP BY Date ORDER BY revenue DESC LIMIT 1
  
+ DATE-SPECIFIC Queries (use daily_data or daily_summary):
+ IMPORTANT: Date column is datetime. ALWAYS use date(Date) for filtering, NOT Date directly!
+ - Load Factor for a route on a specific date: SELECT Route, date(Date) as Date, "Load Factor" FROM daily_data WHERE Route='50' AND date(Date)='2025-12-16'
+ - Highest checkins on a date: SELECT Route, Checkins FROM daily_data WHERE date(Date)='2026-01-20' ORDER BY Checkins DESC LIMIT 1
+ - Total Driven Total Km on a date: SELECT SUM("Driven Total Km") as total_km FROM daily_data WHERE date(Date)='2025-01-15'
+ - Routes with more than 5 Cancels on a date: SELECT Route, Cancels FROM daily_data WHERE date(Date)='2025-11-27' AND Cancels > 5 ORDER BY Cancels DESC
+ - Checkins by Service Type on a date: SELECT Service, SUM(Checkins) as total_checkins FROM daily_data WHERE date(Date)='2025-06-15' AND Service='Urban' GROUP BY Service
+ - Max PVR for a route: SELECT Route, date(Date) as Date, "Max PVR" FROM daily_data WHERE Route='X25' ORDER BY "Max PVR" DESC LIMIT 10
+ - Avg Seats with Load Factor filter: SELECT Route, "Avg Seats", "Load Factor" FROM daily_data WHERE date(Date)='2025-04-15' AND "Load Factor" < 15.25
+ - Off Route correlation: SELECT Route, "Off Route", "Late Stops", Month FROM monthly_data WHERE "Off Route" > 0 ORDER BY "Off Route" DESC
+ - Checkins for a month: SELECT Route, Checkins FROM monthly_data WHERE Month='January 2026' ORDER BY Checkins DESC LIMIT 5
+ 
  HYBRID (GTFS + TTSS) Queries - REQUIRES JOINS:
  - Revenue by zone (MUST JOIN stops): SELECT s.zone_id, COUNT(DISTINCT m.Route) as routes, SUM(m."Unsettled Revenue") as revenue FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN stop_times st ON t.trip_id = st.trip_id JOIN stops s ON st.stop_id = s.stop_id WHERE m.Month='July 2025' GROUP BY s.zone_id ORDER BY revenue DESC
  - Performance by route type (MUST JOIN routes): SELECT CASE WHEN r.route_type=1 THEN 'Metro' WHEN r.route_type=3 THEN 'Bus' ELSE 'Other' END as type, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name WHERE m.Month='August 2025' GROUP BY type
- - Weekday vs weekend (MUST JOIN calendar): SELECT CASE WHEN c.saturday=1 OR c.sunday=1 THEN 'Weekend' ELSE 'Weekday' END as pattern, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN calendar c ON t.service_id = c.service_id WHERE m.Month='August 2025' GROUP BY pattern
  
  CRITICAL: zone_id is ONLY in stops table, route_type is ONLY in routes table, service schedules are ONLY in calendar table. You MUST JOIN these tables to access these columns!""",
                 "parameters": {
@@ -619,7 +651,7 @@ Please try rephrasing your question or use one of the examples above."""
             },
             {
                 "name": "get_load_factor_analysis",
-                "description": "Analyze Load Factor (capacity utilization) for routes from TTSS data. Shows passenger-km vs seat-km ratio.",
+                "description": "Analyze Load Factor (capacity utilization) for routes from TTSS data. Shows passenger-km vs seat-km ratio. Supports both monthly and date-specific queries.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -633,7 +665,11 @@ Please try rephrasing your question or use one of the examples above."""
                         },
                         "month": {
                             "type": "string",
-                            "description": "Month to filter by",
+                            "description": "Month to filter by (e.g., 'July 2025'). Use for monthly queries.",
+                        },
+                        "date": {
+                            "type": "string",
+                            "description": "Specific date to filter by (e.g., '2025-12-16'). Use for date-specific queries like 'on 16th December 2025'. Format: YYYY-MM-DD.",
                         },
                         "limit": {
                             "type": "integer",
@@ -816,7 +852,7 @@ Please try rephrasing your question or use one of the examples above."""
             },
             {
                 "name": "analyze_weekend_vs_weekday",
-                "description": "Compare weekend vs weekday performance from TTSS daily summary data. Note: Daily data is aggregated by Service only, not by individual routes.",
+                "description": "Compare weekend vs weekday performance from TTSS daily data. Supports both service-level and route-level analysis. When a route_id is provided, uses route-level daily data.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -826,7 +862,11 @@ Please try rephrasing your question or use one of the examples above."""
                         },
                         "month": {
                             "type": "string",
-                            "description": "Month filter (e.g., 'July 2025')",
+                            "description": "Month filter (e.g., 'November 2025')",
+                        },
+                        "route_id": {
+                            "type": "string",
+                            "description": "Optional route ID for route-level weekend vs weekday analysis (e.g., '50', 'E100')",
                         },
                     },
                     "required": [],
@@ -1037,61 +1077,46 @@ Please try rephrasing your question or use one of the examples above."""
                 "name": "execute_sql_query",
                 "description": """Execute SQL query on transit data for DATA ANALYSIS ONLY. 
 
-⚠️ DO NOT USE THIS FOR PLOTTING! This returns a data table, not a chart. For plotting, use plot_monthly_kpi_trends, plot_month_comparison, or plot_quarterly_comparison.
+⚠️ DO NOT USE THIS FOR PLOTTING! This returns a data table, not a chart. For plotting, use plot_sql_query.
 
 Use this for: percentage changes, aggregations, data comparisons, calculating totals/sums.
 
 CRITICAL - Choosing the Right Table:
-- Use totals_summary for SERVICE-LEVEL analysis (comparing Urban vs Intercity vs Feeder as a whole)
-- Use monthly_data for ROUTE-LEVEL analysis (individual routes, "all routes", "bus routes performance", route lists)
+- Use totals_summary for SERVICE-LEVEL MONTHLY analysis (comparing Urban vs Intercity vs Feeder as a whole)
+- Use monthly_data for ROUTE-LEVEL MONTHLY analysis (individual routes, "all routes", "bus routes performance")
+- Use daily_data for ROUTE-LEVEL DATE-SPECIFIC analysis (specific date queries like "on 16-Dec-2025")
+- Use daily_summary for SERVICE-LEVEL DATE-SPECIFIC analysis (service aggregates on specific dates)
 
-When user asks about "routes" or "all routes" or "bus routes" → USE monthly_data (has Route column)
-When user asks about "services" or "Urban vs Intercity" → USE totals_summary (aggregated by Service)
+CRITICAL - SPECIFIC DATE QUERIES:
+When user asks about a SPECIFIC DATE (e.g., "on 16th December 2025", "on 20-Jan-2026"):
+- ALWAYS use daily_data (route-level) or daily_summary (service-level)
+- NEVER use monthly_data for date-specific queries!
+- Date is datetime. ALWAYS filter using: date(Date) = '2025-12-16' (NOT Date = '2025-12-16')
+- Pass the month in months parameter (e.g., months=["December 2025"])
+
+CRITICAL - COLUMN NAME GOTCHAS:
+- "Max PVR" is a COLUMN NAME (not SQL MAX function). Always quote it: "Max PVR". NEVER write MAX(PVR).
+- "Avg Seats" is a COLUMN NAME. Always quote it: "Avg Seats". NEVER write AVG(Seats).
+- "Avg Fare" is a COLUMN NAME. Always quote it: "Avg Fare". NEVER write AVG(Fare).
+- "Avg Daily Cost" is a COLUMN NAME. Always quote it: "Avg Daily Cost".
+- "Driven Total Km" is the total km (revenue + dead). Always quote it: "Driven Total Km".
+- "Off Route" is a COLUMN NAME for off-route occurrences. Always quote it: "Off Route".
+- "Avg Seats", "Max PVR", "Max Duties", "Length of Ride" exist ONLY in daily_data (NOT in monthly_data).
 
 Available Tables:
-- totals_summary/service_data: SERVICE-LEVEL aggregates - use for comparing Urban/Intercity/Feeder services as a whole
-  * Columns: Month, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.
-  * Month format: "July 2025" (space between month and year)
-  * NO Route column - this is aggregated by Service only!
-- monthly_data/route_data: ROUTE-LEVEL data - use for individual routes or "all routes" queries
-  * Columns: Month, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'Plan Rev Trips', 'Operated Rev Trips', etc.
-  * Month format: "July 2025" (space between month and year)
-  * HAS Route column - use this when user wants route-level information!
-- daily_summary: Service-level DAILY aggregates (Date, Day, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.)
-  * Date format: datetime (e.g., '2025-08-15')
-- daily_data: Route-level DAILY data (Date, Day, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', etc.)
-  * Date format: datetime (e.g., '2025-08-15')
-- routes: GTFS routes (route_id, route_short_name, route_long_name, route_type)
-- stops: GTFS stops (stop_id, stop_name, stop_lat, stop_lon, zone_id)
-- trips: GTFS trips (trip_id, route_id, service_id, trip_headsign, direction_id, shape_id)
-- stop_times: GTFS stop times (trip_id, stop_id, arrival_time, departure_time, stop_sequence)
-- calendar: GTFS service calendar (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
-- calendar_dates: GTFS calendar exceptions (service_id, date, exception_type)
-- shapes: GTFS route shapes (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence)
-- transfers: GTFS transfer rules (from_stop_id, to_stop_id, transfer_type, min_transfer_time)
-- agency: GTFS agency info (agency_id, agency_name, agency_url, agency_timezone)
+- totals_summary: Month, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'CRR', 'Checkins', etc.
+- monthly_data: Month, Route, Service, 'Unsettled Revenue', 'OTP%', 'Load Factor', 'Driven Total Km', 'Off Route', 'Late Stops', etc.
+- daily_data: Date, Day, Route, Service, + all KPIs + 'Avg Seats', 'Max PVR', 'Max Duties', 'Length of Ride'
+- daily_summary: Date, Day, Service, + all KPIs (no Route, no Avg Seats/Max PVR)
+- GTFS: routes, stops, trips, stop_times, calendar, shapes, transfers, agency
 
-CRITICAL: Month format is consistent - ALWAYS use space format "July 2025":
-- totals_summary: Month = "July 2025" (space format)
-- monthly_data: Month = "July 2025" (space format)
-- daily_summary/daily_data: Use Date column (datetime, not Month)
-
-Note: Column names with spaces must be quoted with double quotes in SQL (e.g., "Unsettled Revenue", "OTP%", "Plan Rev Trips")
-
-Example Queries:
-
-SINGLE TABLE Queries:
-- Percentage change: SELECT Service, ((MAX(CASE WHEN Month='December 2024' THEN "Unsettled Revenue" END) - MAX(CASE WHEN Month='September 2024' THEN "Unsettled Revenue" END)) / MAX(CASE WHEN Month='September 2024' THEN "Unsettled Revenue" END) * 100) as pct_change FROM totals_summary WHERE Service='Urban' GROUP BY Service
-- Month comparison: SELECT Month, Service, "Unsettled Revenue" FROM totals_summary WHERE Month IN ('July 2025', 'August 2025')
-- Aggregation: SELECT Service, SUM("Unsettled Revenue") as total FROM totals_summary WHERE Month IN ('July 2025', 'August 2025') GROUP BY Service
-- Daily data: SELECT Date, Day, SUM("Unsettled Revenue") as revenue FROM daily_summary WHERE strftime('%Y-%m', Date) = '2025-08' GROUP BY Date ORDER BY revenue DESC LIMIT 1
-
-HYBRID (GTFS + TTSS) Queries - REQUIRES JOINS:
-- Revenue by zone (MUST JOIN stops): SELECT s.zone_id, COUNT(DISTINCT m.Route) as routes, SUM(m."Unsettled Revenue") as revenue FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN stop_times st ON t.trip_id = st.trip_id JOIN stops s ON st.stop_id = s.stop_id WHERE m.Month='July 2025' GROUP BY s.zone_id ORDER BY revenue DESC
-- Performance by route type (MUST JOIN routes): SELECT CASE WHEN r.route_type=1 THEN 'Metro' WHEN r.route_type=3 THEN 'Bus' ELSE 'Other' END as type, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name WHERE m.Month='August 2025' GROUP BY type
-- Weekday vs weekend (MUST JOIN calendar): SELECT CASE WHEN c.saturday=1 OR c.sunday=1 THEN 'Weekend' ELSE 'Weekday' END as pattern, AVG(m."OTP%") as avg_otp FROM monthly_data m JOIN routes r ON m.Route = r.route_short_name JOIN trips t ON r.route_id = t.route_id JOIN calendar c ON t.service_id = c.service_id WHERE m.Month='August 2025' GROUP BY pattern
-
-CRITICAL: zone_id is ONLY in stops table, route_type is ONLY in routes table, service schedules are ONLY in calendar table. You MUST JOIN these tables to access these columns!""",
+Example Date-Specific Queries (ALWAYS use date(Date) for filtering!):
+- Load Factor for route on date: SELECT Route, date(Date) as Date, "Load Factor" FROM daily_data WHERE Route='50' AND date(Date)='2025-12-16'
+- Routes with >5 Cancels on date: SELECT Route, Cancels FROM daily_data WHERE date(Date)='2025-11-27' AND Cancels > 5
+- Max PVR for route: SELECT Route, date(Date) as Date, "Max PVR" FROM daily_data WHERE Route='X25' ORDER BY "Max PVR" DESC
+- Avg Seats with filter: SELECT Route, "Avg Seats", "Load Factor" FROM daily_data WHERE date(Date)='2025-04-15' AND "Load Factor" < 15.25
+- Checkins by Service on date: SELECT Service, SUM(Checkins) as total FROM daily_data WHERE date(Date)='2025-06-15' GROUP BY Service
+- Driven Total Km for a month: SELECT SUM("Driven Total Km") as total FROM monthly_data WHERE Month='January 2025'""",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -1102,7 +1127,7 @@ CRITICAL: zone_id is ONLY in stops table, route_type is ONLY in routes table, se
                         "months": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Optional list of months to load data for (improves performance). Example: ['September 2024', 'December 2024']",
+                            "description": "Optional list of months to load data for (improves performance). Example: ['September 2024', 'December 2024']. CRITICAL: Always include this for date-specific queries!",
                         },
                     },
                     "required": ["sql_query"],
@@ -1178,6 +1203,20 @@ CRITICAL: zone_id is ONLY in stops table, route_type is ONLY in routes table, se
             "analyze_service_frequency",
             "get_transfer_points",
             "analyze_network_connectivity",
+            # TTSS functions
+            "get_otp_analysis",
+            "get_load_factor_analysis",
+            "get_crr_analysis",
+            "get_ridership_trends",
+            "get_revenue_analysis",
+            "get_cost_efficiency",
+            "get_service_summary",
+            "get_top_routes_by_kpi",
+            "get_route_performance",
+            "analyze_weekend_vs_weekday",
+            "query_multi_month_data",
+            "aggregate_monthly_data",
+            "calculate_percentage_change",
             # SQL-based querying
             "execute_sql_query",
         ]

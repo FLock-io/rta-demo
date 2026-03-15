@@ -615,6 +615,7 @@ class LocalExecutor:
         route_id: str = None,
         service: str = None,
         month: str = None,
+        date: str = None,
         limit: int = 20,
     ) -> pd.DataFrame:
         """
@@ -624,41 +625,62 @@ class LocalExecutor:
             route_id: Optional route ID to filter by
             service: Optional service type (Urban/Intercity/Feeder)
             month: Optional month to filter by (e.g., 'July 2025')
+            date: Optional specific date to filter by (e.g., '2025-12-16')
             limit: Maximum number of results to return
 
         Returns:
             DataFrame with OTP% analysis
         """
-        months_filter = [month] if month else None
-        df = self.data_loader.get_monthly_data(months=months_filter)
+        if date:
+            parsed_date = pd.to_datetime(date, errors='coerce')
+            if pd.notna(parsed_date):
+                month_name = parsed_date.strftime('%B %Y')
+                df = self.data_loader.get_daily_data(months=[month_name])
+                if not df.empty and 'Date' in df.columns:
+                    df = df[df['Date'].dt.date == parsed_date.date()]
+            else:
+                df = pd.DataFrame()
+        else:
+            months_filter = [month] if month else None
+            df = self.data_loader.get_monthly_data(months=months_filter)
 
         if df.empty:
             return pd.DataFrame({"Message": ["No TTSS data available"]})
 
-        # Filter by route_id if provided
         if route_id:
             df = df[df["Route"].astype(str) == str(route_id)]
 
-        # Filter by service if provided
         if service:
             df = df[df["Service"].str.lower() == service.lower()]
 
-        # Select relevant columns
-        columns = [
-            "Month",
-            "Route",
-            "Service",
-            "OTP%",
-            "1stStop1stTrip OTP%",
-            "OnTime Stops",
-            "Total Stops",
-            "Late Stops",
-            "Early Stops",
-        ]
+        if date:
+            columns = [
+                "Date",
+                "Day",
+                "Route",
+                "Service",
+                "OTP%",
+                "1stStop1stTrip OTP%",
+                "OnTime Stops",
+                "Total Stops",
+                "Late Stops",
+                "Early Stops",
+            ]
+        else:
+            columns = [
+                "Month",
+                "Route",
+                "Service",
+                "OTP%",
+                "1stStop1stTrip OTP%",
+                "OnTime Stops",
+                "Total Stops",
+                "Late Stops",
+                "Early Stops",
+            ]
         available_columns = [col for col in columns if col in df.columns]
         result = df[available_columns].copy()
 
-        # Sort by OTP% descending
         if "OTP%" in result.columns:
             result = result.sort_values("OTP%", ascending=False)
 
@@ -669,6 +691,7 @@ class LocalExecutor:
         route_id: str = None,
         service: str = None,
         month: str = None,
+        date: str = None,
         limit: int = 20,
     ) -> pd.DataFrame:
         """
@@ -678,40 +701,60 @@ class LocalExecutor:
             route_id: Optional route ID to filter by
             service: Optional service type
             month: Optional month to filter by
+            date: Optional specific date to filter by (e.g., '2025-12-16')
             limit: Maximum number of results
 
         Returns:
             DataFrame with Load Factor analysis
         """
-        months_filter = [month] if month else None
-        df = self.data_loader.get_monthly_data(months=months_filter)
+        if date:
+            parsed_date = pd.to_datetime(date, errors='coerce')
+            if pd.notna(parsed_date):
+                month_name = parsed_date.strftime('%B %Y')
+                df = self.data_loader.get_daily_data(months=[month_name])
+                if not df.empty and 'Date' in df.columns:
+                    df = df[df['Date'].dt.date == parsed_date.date()]
+            else:
+                df = pd.DataFrame()
+        else:
+            months_filter = [month] if month else None
+            df = self.data_loader.get_monthly_data(months=months_filter)
 
         if df.empty:
             return pd.DataFrame({"Message": ["No TTSS data available"]})
 
-        # Filter by route_id if provided
         if route_id:
             df = df[df["Route"].astype(str) == str(route_id)]
 
-        # Filter by service if provided
         if service:
             df = df[df["Service"].str.lower() == service.lower()]
 
-        # Select relevant columns
-        columns = [
-            "Month",
-            "Route",
-            "Service",
-            "Load Factor",
-            "Passenger Km",
-            "Seat Km",
-            "Checkins",
-            "Operated Rev Trips",
-        ]
+        if date:
+            columns = [
+                "Date",
+                "Day",
+                "Route",
+                "Service",
+                "Load Factor",
+                "Passenger Km",
+                "Seat Km",
+                "Checkins",
+                "Operated Rev Trips",
+            ]
+        else:
+            columns = [
+                "Month",
+                "Route",
+                "Service",
+                "Load Factor",
+                "Passenger Km",
+                "Seat Km",
+                "Checkins",
+                "Operated Rev Trips",
+            ]
         available_columns = [col for col in columns if col in df.columns]
         result = df[available_columns].copy()
 
-        # Sort by Load Factor descending
         if "Load Factor" in result.columns:
             result = result.sort_values("Load Factor", ascending=False)
 
@@ -1057,53 +1100,70 @@ class LocalExecutor:
         return df
 
     def analyze_weekend_vs_weekday(
-        self, service: str = None, month: str = None
+        self, service: str = None, month: str = None, route_id: str = None
     ) -> pd.DataFrame:
         """
-        Compare weekend vs weekday performance using Daily Summary data.
+        Compare weekend vs weekday performance.
 
-        Note: Daily data is aggregated by Service only, not by individual routes.
+        Uses daily_data (route-level) when a route is specified,
+        otherwise uses daily_summary (service-level aggregates).
 
         Args:
             service: Optional service type filter (Urban/Intercity/Feeder/Seasonal)
             month: Optional month filter
+            route_id: Optional route ID for route-level analysis
 
         Returns:
             DataFrame comparing weekend vs weekday metrics
         """
         months_filter = [month] if month else None
-        df = self.data_loader.get_daily_summary(months=months_filter)
+
+        if route_id:
+            df = self.data_loader.get_daily_data(months=months_filter)
+        else:
+            df = self.data_loader.get_daily_summary(months=months_filter)
 
         if df.empty:
-            return pd.DataFrame({"Message": ["No daily summary data available"]})
+            return pd.DataFrame({"Message": ["No daily data available"]})
 
-        # Filter by service if provided
+        if route_id:
+            df = df[df["Route"].astype(str) == str(route_id)]
+            if df.empty:
+                return pd.DataFrame({"Message": [f"No daily data found for route {route_id}"]})
+
         if service:
             df = df[df["Service"].str.lower() == service.lower()]
 
-        # Identify weekends (assuming 'Day' column has day names)
         if "Day" in df.columns:
+            df = df.copy()
             df["Is_Weekend"] = (
-                df["Day"].str.strip().isin(["Sat", "Sun", "Saturday", "Sunday"])
+                df["Day"].str.strip().isin(["Sat", "Sun", "Saturday", "Sunday", "Fri", "Friday"])
             )
 
-            # Group by weekend/weekday
+            agg_cols = {}
+            for col in ["Checkins", "OTP%", "Load Factor", "Operated Rev Trips", "Cancels"]:
+                if col in df.columns:
+                    if col in ["OTP%", "Load Factor"]:
+                        agg_cols[col] = "mean"
+                    else:
+                        agg_cols[col] = "sum"
+
+            if not agg_cols:
+                return pd.DataFrame({"Message": ["No aggregatable columns found"]})
+
             grouped = (
                 df.groupby("Is_Weekend")
-                .agg(
-                    {
-                        "Checkins": "sum",
-                        "OTP%": "mean",
-                        "Load Factor": "mean",
-                        "Operated Rev Trips": "sum",
-                        "Cancels": "sum",
-                    }
-                )
+                .agg(agg_cols)
                 .round(2)
             )
 
-            grouped.index = ["Weekday", "Weekend"]
-            return grouped.reset_index().rename(columns={"Is_Weekend": "Period"})
+            grouped.index = grouped.index.map({False: "Weekday", True: "Weekend"})
+            result = grouped.reset_index().rename(columns={"Is_Weekend": "Period"})
+            if route_id:
+                result.insert(0, "Route", route_id)
+            if month:
+                result.insert(0, "Month", month)
+            return result
         else:
             return pd.DataFrame(
                 {"Message": ["Day column not available for weekend analysis"]}

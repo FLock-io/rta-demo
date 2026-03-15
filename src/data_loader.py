@@ -32,9 +32,9 @@ class DataLoader:
         self.sync_intranet_data()
 
     def _generate_month_year_pairs(self):
-        """Generate (MonthName, Year) pairs for the range Nov 2022 - Oct 2025."""
+        """Generate (MonthName, Year) pairs for the range Nov 2022 - Jan 2026."""
         start_date = datetime(2022, 11, 1)
-        end_date = datetime(2025, 10, 1)
+        end_date = datetime(2026, 1, 1)
         
         pairs = []
         current_date = start_date
@@ -52,7 +52,7 @@ class DataLoader:
         return pairs
 
     def sync_intranet_data(self):
-        """Download missing files from intranet for the period Nov 2022 - Oct 2025."""
+        """Download missing files from intranet for the period Nov 2022 - Jan 2026."""
         base_url = "https://intranet.rta.ae/sites/rta/PTA/TTSS/Statistics/Released/For%20Planning/Route%20Summary%20PBD%20Dash/"
         req = requests.Session()
         if HttpNegotiateAuth:
@@ -523,9 +523,8 @@ class DataLoader:
         dfs = []
         for month, df in all_data.items():
             df_copy = df.copy()
-            # Parse Date column if it exists
             if 'Date' in df_copy.columns:
-                df_copy['Date'] = pd.to_datetime(df_copy['Date'], errors='coerce', format='%d-%b-%Y')
+                df_copy['Date'] = pd.to_datetime(df_copy['Date'], errors='coerce', dayfirst=True)
             dfs.append(df_copy)
 
         combined = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
@@ -562,9 +561,8 @@ class DataLoader:
         dfs = []
         for month, df in all_data.items():
             df_copy = df.copy()
-            # Parse Date column if it exists
             if 'Date' in df_copy.columns:
-                df_copy['Date'] = pd.to_datetime(df_copy['Date'], errors='coerce', format='%d-%b-%Y')
+                df_copy['Date'] = pd.to_datetime(df_copy['Date'], errors='coerce', dayfirst=True)
             dfs.append(df_copy)
 
         combined = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()

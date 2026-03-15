@@ -64,6 +64,30 @@ Key Guidelines:
    - Join `monthly_data` or `totals_summary` with GTFS tables (routes, stops) for advanced analysis.
    - Example: Revenue by Zone -> Join `monthly_data` with `stops` (via trips/stop_times).
 
+CRITICAL - DATE-SPECIFIC vs MONTHLY QUERIES:
+- When user asks about a SPECIFIC DATE (e.g., "on 16th December 2025", "on 20-Jan-2026", "on 15-Jun-2025"):
+  → Use daily_data (route-level) or daily_summary (service-level) tables
+  → Date column is datetime. ALWAYS filter using: date(Date) = '2025-12-16' (NOT Date = '2025-12-16')
+  → Pass the month in months parameter: months=["December 2025"]
+- When user asks about a MONTH (e.g., "in January 2025", "for November 2025"):
+  → Use monthly_data (route-level) or totals_summary (service-level) tables
+  → Filter: Month = 'January 2025'
+
+CRITICAL - COLUMN NAME GOTCHAS (these are column names, NOT SQL functions):
+- "Max PVR" → a column name. Write: "Max PVR" in SQL. NEVER write MAX(PVR).
+- "Avg Seats" → a column name. Write: "Avg Seats" in SQL. NEVER write AVG(Seats).
+- "Avg Fare" → a column name. Write: "Avg Fare" in SQL. NEVER write AVG(Fare).
+- "Avg Daily Cost" → a column name. Write: "Avg Daily Cost" in SQL.
+- "Driven Total Km" → total km driven (revenue + dead). It's a column, not a calculation.
+- "Off Route" → a column tracking off-route occurrences.
+- IMPORTANT: "Avg Seats", "Max PVR", "Max Duties", "Length of Ride" exist ONLY in daily_data table, NOT in monthly_data!
+
+CRITICAL - CORRELATION/ANALYSIS QUERIES:
+When user asks about correlations or relationships between metrics (e.g., "Off Route correlation with Late Stops"):
+- ALWAYS include the time frame (Month column or Date range) in the result
+- Include both metrics in the SELECT
+- Add context columns like Route, Service, Month/Date so the user knows what period was analyzed
+
 CRITICAL: CHOOSING GTFS vs TTSS DATA
 - GTFS tables (routes, trips, stop_times, stops, calendar): Use for SCHEDULE questions
   * Wait time, headway, frequency, how often a route runs
@@ -210,13 +234,66 @@ DATA QUERY Examples (use execute_sql_query):
       months=["August 2025"]
     )
 
+DATE-SPECIFIC Examples (use daily_data or daily_summary - ALWAYS use date(Date) for filtering!):
+- "Load Factor for Route 50 on 16th December 2025"
+  → execute_sql_query(
+      sql_query='SELECT Route, date(Date) as Date, "Load Factor" FROM daily_data WHERE Route="50" AND date(Date)="2025-12-16"',
+      months=["December 2025"]
+    )
+
+- "Which route had the highest Checkins on 20-Jan-2026?"
+  → execute_sql_query(
+      sql_query='SELECT Route, Checkins FROM daily_data WHERE date(Date)="2026-01-20" ORDER BY Checkins DESC LIMIT 1',
+      months=["January 2026"]
+    )
+
+- "Routes with more than 5 Cancels on 27-Nov-2025"
+  → execute_sql_query(
+      sql_query='SELECT Route, Cancels FROM daily_data WHERE date(Date)="2025-11-27" AND Cancels > 5 ORDER BY Cancels DESC',
+      months=["November 2025"]
+    )
+
+- "Total Driven Total Km across all routes on January 2025"
+  → execute_sql_query(
+      sql_query='SELECT SUM("Driven Total Km") as Total_Driven_Km FROM monthly_data WHERE Month="January 2025"',
+      months=["January 2025"]
+    )
+
+- "What is the Max PVR on Route X25?"
+  → execute_sql_query(
+      sql_query='SELECT Route, date(Date) as Date, "Max PVR" FROM daily_data WHERE Route="X25" ORDER BY "Max PVR" DESC LIMIT 10'
+    )
+  NOTE: "Max PVR" is a COLUMN NAME, not SQL MAX(). It exists only in daily_data.
+
+- "Avg Seats on routes with Load Factor below 15.25% on 15-Apr-2025"
+  → execute_sql_query(
+      sql_query='SELECT Route, "Avg Seats", "Load Factor" FROM daily_data WHERE date(Date)="2025-04-15" AND "Load Factor" < 15.25',
+      months=["April 2025"]
+    )
+
+- "Total check-ins on Urban Service Type on 15-Jun-2025"
+  → execute_sql_query(
+      sql_query='SELECT Service, SUM(Checkins) as Total_Checkins FROM daily_data WHERE date(Date)="2025-06-15" AND Service="Urban" GROUP BY Service',
+      months=["June 2025"]
+    )
+
+- "Off Route correlation with Late Stops"
+  → execute_sql_query(
+      sql_query='SELECT Route, Month, Service, "Off Route", "Late Stops" FROM monthly_data WHERE "Off Route" > 0 ORDER BY "Off Route" DESC LIMIT 20'
+    )
+
 CRITICAL SQL HINTS:
 - Table `totals_summary` has columns: Month, Service, "Unsettled Revenue", "OTP%", "Load Factor", etc.
-- Table `monthly_data` has columns: Month, Route, Service, "Unsettled Revenue", "OTP%", etc.
+- Table `monthly_data` has columns: Month, Route, Service, "Unsettled Revenue", "OTP%", "Driven Total Km", "Off Route", "Late Stops", etc.
+- Table `daily_data` has columns: Date, Day, Route, Service, + all KPIs + "Avg Seats", "Max PVR", "Max Duties", "Length of Ride"
+- Table `daily_summary` has columns: Date, Day, Service, + all KPIs (NO Route column)
 - Column names with spaces MUST be double-quoted (e.g., "Unsettled Revenue").
+- "Max PVR", "Avg Seats", "Avg Fare", "Avg Daily Cost" are COLUMN NAMES, not SQL functions!
 - Month format is "Month YYYY" (e.g., "July 2025").
 - Use `totals_summary` for high-level service comparisons.
-- Use `monthly_data` for route-level analysis.
+- Use `monthly_data` for route-level monthly analysis.
+- Use `daily_data` for route-level date-specific queries.
+- Use `daily_summary` for service-level date-specific queries.
 """
 
     # Following are individual prompts for various analysis tasks
@@ -495,7 +572,7 @@ Provide responses with:
         return """
 Analyze TTSS (Transit Tracking & Scheduling System) Key Performance Indicators:
 
-Available KPIs (November 2022 to October 2025):
+Available KPIs (November 2022 to January 2026):
 
 1. On-Time Performance (OTP%):
    - Target: >85% for Urban, >90% for Intercity
@@ -514,7 +591,7 @@ Available KPIs (November 2022 to October 2025):
 
 4. Ridership Metrics:
    - Checkins/Checkouts per route
-   - Trends over the available period (Nov 2022 - Oct 2025)
+   - Trends over the available period (Nov 2022 - Jan 2026)
    - Service type comparisons
 
 5. Operational Efficiency:
@@ -573,7 +650,7 @@ Comparison Types:
    - Area coverage analysis
 
 Analysis Guidelines:
-- Use all available historical data for trends (Nov 2022 - Oct 2025)
+- Use all available historical data for trends (Nov 2022 - Jan 2026)
 - Calculate percentage changes
 - Identify significant variations
 - Contextualize with industry benchmarks
@@ -639,7 +716,7 @@ You are analyzing Dubai RTA transit data through a conversational interface.
 
 Data Access:
 - GTFS: Static route/stop information, schedules (valid for all time periods)
-- TTSS: Operational KPIs from November 2022 to October 2025
+- TTSS: Operational KPIs from November 2022 to January 2026
 
 Response Style:
 - Be concise and data-driven
@@ -669,7 +746,7 @@ If data is unavailable:
             Prompt for monthly analysis
         """
         return """
-Analyze monthly trends using TTSS data (November 2022 to October 2025):
+Analyze monthly trends using TTSS data (November 2022 to January 2026):
 
 Monthly Analysis Focus Areas:
 
@@ -1036,7 +1113,7 @@ Forecasting Framework:
    - Capacity constraints
 
 Forecasting Approach:
-- Use all available historical data as baseline (Nov 2022 - Oct 2025)
+- Use all available historical data as baseline (Nov 2022 - Jan 2026)
 - Apply seasonal factors
 - Consider known upcoming changes
 - Provide confidence ranges
